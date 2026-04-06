@@ -19,10 +19,13 @@ async function startServer() {
 
   // Simulated Inventory & Pricing Endpoint
   let inventory = [
-    { id: 1, item: "Wagyu Beef", stock: 15, unit: "kg", price: 250 },
-    { id: 2, item: "Truffles", stock: 2, unit: "kg", price: 1200 },
-    { id: 3, item: "Vintage Wine", stock: 48, unit: "bottles", price: 85 },
-    { id: 4, item: "Organic Saffron", stock: 500, unit: "g", price: 15 },
+    { id: 1, item: "Beef Prime Cuts", stock: 150, unit: "kg", price: 2500 },
+    { id: 2, item: "Pork Spare Ribs", stock: 80, unit: "kg", price: 1800 },
+    { id: 3, item: "Leg of Lamb", stock: 45, unit: "kg", price: 2200 },
+    { id: 4, item: "Crocodile Meat", stock: 12, unit: "kg", price: 4500 },
+    { id: 5, item: "Ostrich Meat", stock: 8, unit: "kg", price: 5200 },
+    { id: 6, item: "Camel Meat", stock: 5, unit: "kg", price: 4800 },
+    { id: 7, item: "Dawa Ingredients", stock: 500, unit: "servings", price: 850 },
   ];
 
   app.get("/api/inventory", (req, res) => {
@@ -31,9 +34,9 @@ async function startServer() {
 
   app.get("/api/market-trends", (req, res) => {
     res.json([
-      { item: "Wagyu Beef", trend: "rising", change: "+5%" },
-      { item: "Truffles", trend: "stable", change: "0%" },
-      { item: "Vintage Wine", trend: "falling", change: "-2%" },
+      { item: "Beef Prime Cuts", trend: "rising", change: "+5%" },
+      { item: "Crocodile Meat", trend: "stable", change: "0%" },
+      { item: "Ostrich Meat", trend: "falling", change: "-2%" },
     ]);
   });
 

@@ -43,7 +43,14 @@ const AGENTS: Agent[] = [
     role: "Booking AI Agent",
     icon: <ConciergeBell className="w-6 h-6" />,
     description: "Handles all reservations, table management, and guest booking inquiries.",
-    systemPrompt: "You are Aurelia, the Booking AI Agent for our restaurant. You manage reservations, check table availability, and handle guest booking requests. Your tone is professional, welcoming, and efficient. You aim to provide a seamless booking experience for our high-end clientele.",
+    systemPrompt: `You are Aurelia, the lead Booking AI Agent for The Carnivore Restaurant in Nairobi, Kenya. 
+    Location: Lang'ata Road, Nairobi.
+    Concept: 'Beast of a Feast' - all-you-can-eat meat experience.
+    Menu: Roasted beef, pork, lamb, chicken, and exotic meats like crocodile and ostrich, carved at the table.
+    Signature Drink: The Dawa cocktail.
+    Experience: Meats are roasted on Maasai swords over a charcoal pit. Guests use a white flag to signal when they are full.
+    Your role: Handle reservations, provide menu details, and manage guest inquiries with a friendly, professional Kenyan hospitality tone. 
+    Guidelines: Provide clear, polite responses. Offer dietary guidance based on our meat-heavy menu. Escalate complex issues to human staff. Never invent data.`,
     color: "from-pink-500/20 to-purple-600/20"
   },
   {
@@ -52,7 +59,10 @@ const AGENTS: Agent[] = [
     role: "Inventory Agent",
     icon: <Warehouse className="w-6 h-6" />,
     description: "Monitors stock levels, predicts shortages, and manages suppliers.",
-    systemPrompt: "You are Stockton, the Inventory Agent. You monitor stock levels for our restaurant. You are concise and focused on logistics. You alert the management about low stock and suggest reordering schedules. Your tone is professional and analytical.",
+    systemPrompt: `You are Stockton, the Inventory Agent for The Carnivore Restaurant. 
+    You monitor stocks of high-quality meats (Wagyu, Crocodile, Ostrich, Beef, Pork), charcoal for the roasting pit, and ingredients for the Dawa cocktail.
+    Your role: Support staff by monitoring stock levels and providing clear updates. 
+    Guidelines: Be professional and concise. Escalate logistical issues. Never invent stock data.`,
     color: "from-purple-500/20 to-pink-600/20"
   },
   {
@@ -61,7 +71,10 @@ const AGENTS: Agent[] = [
     role: "Pricing Agent",
     icon: <BarChart3 className="w-6 h-6" />,
     description: "Monitors market prices and adjusts menu pricing for optimal profitability.",
-    systemPrompt: "You are Valora, the Pricing Agent. You monitor market trends, competitor pricing, and ingredient costs to suggest optimal menu prices. Your goal is to maximize profitability while maintaining our luxury brand value. Your tone is strategic and data-driven.",
+    systemPrompt: `You are Valora, the Pricing Agent for The Carnivore Restaurant. 
+    The 'Beast of a Feast' is typically priced around 5,000 - 6,000 KES ($40-$50 USD).
+    Your role: Monitor market trends and provide data-driven pricing insights. 
+    Guidelines: Provide professional, strategic responses. Escalate major pricing decisions.`,
     color: "from-pink-400/20 to-purple-500/20"
   },
   {
@@ -70,7 +83,10 @@ const AGENTS: Agent[] = [
     role: "OpenAI Assistant",
     icon: <Sparkles className="w-6 h-6" />,
     description: "A versatile AI assistant for general tasks, research, and creative problem solving.",
-    systemPrompt: "You are Nova, a versatile AI assistant powered by advanced language models. You help the restaurant staff with research, creative writing, problem-solving, and any general tasks. You are highly intelligent, helpful, and adaptable.",
+    systemPrompt: `You are Nova, a versatile AI assistant for The Carnivore Restaurant. 
+    You help with general inquiries about Nairobi tourism, the history of the restaurant (opened in 1980), and creative tasks.
+    Your role: Support customers and staff with general info. 
+    Guidelines: Be polite, professional, and helpful. Escalate if unsure.`,
     color: "from-purple-400/20 to-pink-500/20"
   },
   {
@@ -79,7 +95,10 @@ const AGENTS: Agent[] = [
     role: "Voice Agent",
     icon: <Mic className="w-6 h-6" />,
     description: "Handles real-time communication via voice and instant messaging.",
-    systemPrompt: "You are Echo, the Voice Agent. You are the primary interface for quick updates and real-time communication. You are friendly, fast, and helpful. Your tone is modern and conversational.",
+    systemPrompt: `You are Echo, the Voice Agent for The Carnivore Restaurant. 
+    You handle quick order tracking and real-time guest communication.
+    Your role: Provide fast, polite, and professional responses. 
+    Guidelines: Maintain a helpful tone. Escalate communication issues.`,
     color: "from-pink-600/20 to-purple-700/20"
   }
 ];
@@ -125,9 +144,17 @@ const ChatInterface = ({ agent, onClose }: { agent: Agent; onClose: () => void }
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [...messages.map(m => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.content }] })), { role: "user", parts: [{ text: userMsg }] }],
+        contents: [
+          ...messages.map(m => ({ 
+            role: m.role === "user" ? "user" : "model", 
+            parts: [{ text: m.content }] 
+          })), 
+          { role: "user", parts: [{ text: userMsg }] }
+        ],
         config: {
           systemInstruction: agent.systemPrompt,
+          temperature: 0.7,
+          topP: 0.95,
         },
       });
 
@@ -254,7 +281,18 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen selection:bg-primary selection:text-paper">
+    <div className="min-h-screen selection:bg-primary selection:text-paper relative">
+      {/* Global Background Image Overlay */}
+      <div className="fixed inset-0 z-[-1] pointer-events-none">
+        <img 
+          src="https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=2070&auto=format&fit=crop" 
+          alt="Restaurant Ambiance" 
+          className="w-full h-full object-cover opacity-20"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-ink via-ink/90 to-secondary/20" />
+      </div>
+
       <AnimatePresence mode="wait">
         {view === "landing" ? (
           <motion.div
@@ -267,9 +305,9 @@ export default function App() {
             {/* Background Image with Overlay */}
             <div className="absolute inset-0 z-0">
               <img 
-                src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=2000" 
-                alt="Modern Restaurant" 
-                className="w-full h-full object-cover opacity-30 scale-105"
+                src="https://images.unsplash.com/photo-1550966842-2849a220277c?q=80&w=2070&auto=format&fit=crop" 
+                alt="The Carnivore Experience" 
+                className="w-full h-full object-cover opacity-40 scale-105"
                 referrerPolicy="no-referrer"
               />
               <div className="absolute inset-0 bg-gradient-to-b from-ink via-ink/90 to-ink" />
@@ -394,6 +432,28 @@ export default function App() {
               </div>
             </div>
 
+            {/* System Health Sprite */}
+            <div className="mb-12 glass p-6 rounded-3xl border-primary/10 flex flex-wrap items-center gap-8">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-primary">System Health</p>
+                  <p className="text-[10px] text-paper/40">Real-time Agent Verification</p>
+                </div>
+              </div>
+              <div className="h-10 w-[1px] bg-white/10 hidden md:block" />
+              <div className="flex flex-wrap gap-4">
+                {AGENTS.map(agent => (
+                  <div key={agent.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                    <span className="text-[10px] font-medium uppercase tracking-tighter">{agent.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Inventory Quick Look */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
               <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -428,7 +488,7 @@ export default function App() {
                           <div className="w-16 h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
                             <div 
                               className="h-full bg-primary" 
-                              style={{ width: `${Math.min((item.stock / 50) * 100, 100)}%` }} 
+                              style={{ width: `${Math.min((item.stock / 200) * 100, 100)}%` }} 
                             />
                           </div>
                         </div>
@@ -455,6 +515,25 @@ export default function App() {
                         </span>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                <div className="glass p-8 rounded-3xl border-primary/10">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="font-serif font-bold text-xl">Carnivore Menu</h4>
+                    <UtensilsCrossed className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="space-y-3">
+                    {["Beef Steaks", "Pork Spare Ribs", "Leg of Lamb", "Crocodile", "Ostrich", "Camel"].map((meat, i) => (
+                      <div key={i} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        <span className="text-sm text-paper/80">{meat}</span>
+                      </div>
+                    ))}
+                    <div className="mt-4 p-4 rounded-2xl bg-primary/10 border border-primary/20">
+                      <p className="text-[10px] uppercase tracking-widest font-bold text-primary mb-1">Signature Experience</p>
+                      <p className="text-sm font-serif italic text-paper/90">The Dawa Cocktail & Charcoal Pit Roasting</p>
+                    </div>
                   </div>
                 </div>
 
@@ -489,13 +568,13 @@ export default function App() {
       {/* Footer */}
       <footer className="py-12 px-8 border-t border-white/5 opacity-30">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="font-serif text-2xl font-bold">AI Restaurant</div>
+          <div className="font-serif text-2xl font-bold">The Carnivore</div>
           <div className="flex gap-8 text-[10px] uppercase tracking-[0.2em] font-medium">
-            <a href="#" className="hover:text-primary transition-colors">Privacy</a>
-            <a href="#" className="hover:text-primary transition-colors">Terms</a>
-            <a href="#" className="hover:text-primary transition-colors">Contact</a>
+            <a href="#" className="hover:text-primary transition-colors">Nairobi</a>
+            <a href="#" className="hover:text-primary transition-colors">Lang'ata Road</a>
+            <a href="#" className="hover:text-primary transition-colors">Experience</a>
           </div>
-          <div className="text-[10px] uppercase tracking-widest">© 2026 AI Gastronomy Group</div>
+          <div className="text-[10px] uppercase tracking-widest">© 2026 Tamarind Group</div>
         </div>
       </footer>
     </div>
