@@ -127,17 +127,34 @@ const AgentCard = ({ agent, onClick }: { agent: Agent; onClick: () => void }) =>
   </motion.div>
 );
 
-const ChatInterface = ({ agent, onClose }: { agent: Agent; onClose: () => void }) => {
-  const [messages, setMessages] = useState<{ role: "user" | "agent"; content: string }[]>([]);
+const ChatInterface = ({ 
+  agent, 
+  messages, 
+  onMessagesUpdate, 
+  onClose 
+}: { 
+  agent: Agent; 
+  messages: { role: "user" | "agent"; content: string }[];
+  onMessagesUpdate: (msgs: { role: "user" | "agent"; content: string }[]) => void;
+  onClose: () => void;
+}) => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isLoading]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
     const userMsg = input;
     setInput("");
-    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    const newMessages = [...messages, { role: "user" as const, content: userMsg }];
+    onMessagesUpdate(newMessages);
     setIsLoading(true);
 
     try {
@@ -145,11 +162,10 @@ const ChatInterface = ({ agent, onClose }: { agent: Agent; onClose: () => void }
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
-          ...messages.map(m => ({ 
+          ...newMessages.map(m => ({ 
             role: m.role === "user" ? "user" : "model", 
             parts: [{ text: m.content }] 
-          })), 
-          { role: "user", parts: [{ text: userMsg }] }
+          }))
         ],
         config: {
           systemInstruction: agent.systemPrompt,
@@ -159,10 +175,10 @@ const ChatInterface = ({ agent, onClose }: { agent: Agent; onClose: () => void }
       });
 
       const text = response.text || "I apologize, I am unable to process that request at the moment.";
-      setMessages(prev => [...prev, { role: "agent", content: text }]);
+      onMessagesUpdate([...newMessages, { role: "agent", content: text }]);
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: "agent", content: "An error occurred. Please check your connection." }]);
+      onMessagesUpdate([...newMessages, { role: "agent", content: "An error occurred. Please check your connection." }]);
     } finally {
       setIsLoading(false);
     }
@@ -175,29 +191,43 @@ const ChatInterface = ({ agent, onClose }: { agent: Agent; onClose: () => void }
       exit={{ opacity: 0, scale: 0.95 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
     >
-      <div className="w-full max-w-2xl h-[80vh] glass rounded-3xl flex flex-col overflow-hidden border-primary/20">
+      <div className="w-full max-w-4xl h-[85vh] glass rounded-3xl flex flex-col overflow-hidden border-primary/20 shadow-2xl">
         {/* Header */}
         <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+            <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
               {agent.icon}
             </div>
             <div>
-              <h3 className="font-serif font-bold text-lg">{agent.name}</h3>
-              <p className="text-xs text-primary/60 uppercase tracking-widest">{agent.role}</p>
+              <h3 className="font-serif font-bold text-xl">{agent.name}</h3>
+              <p className="text-xs text-primary/60 uppercase tracking-widest font-bold">{agent.role}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => onMessagesUpdate([])}
+              className="px-4 py-2 text-[10px] uppercase tracking-widest font-bold hover:bg-white/5 rounded-lg transition-colors opacity-40 hover:opacity-100"
+            >
+              Clear History
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+        <div 
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide scroll-smooth"
+        >
           {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-              <Sparkles className="w-12 h-12 mb-4 text-primary" />
-              <p className="font-serif italic">How may I assist you today?</p>
+              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+                <Sparkles className="w-10 h-10 text-primary" />
+              </div>
+              <h4 className="font-serif text-2xl mb-2">Welcome to The Carnivore</h4>
+              <p className="italic max-w-xs mx-auto">I'm {agent.name}. How can I make your dining experience unforgettable today?</p>
             </div>
           )}
           {messages.map((msg, i) => (
@@ -206,48 +236,55 @@ const ChatInterface = ({ agent, onClose }: { agent: Agent; onClose: () => void }
               animate={{ opacity: 1, y: 0 }}
               key={i}
               className={cn(
-                "flex flex-col max-w-[85%]",
+                "flex flex-col max-w-[80%]",
                 msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start"
               )}
             >
               <div className={cn(
-                "p-4 rounded-2xl text-sm leading-relaxed",
-                msg.role === "user" ? "bg-primary text-paper font-medium" : "bg-white/10 text-paper"
+                "p-5 rounded-2xl text-sm leading-relaxed shadow-lg",
+                msg.role === "user" 
+                  ? "bg-primary text-paper font-medium rounded-tr-none" 
+                  : "bg-white/10 text-paper border border-white/5 rounded-tl-none"
               )}>
-                <Markdown>{msg.content}</Markdown>
+                <div className="markdown-body">
+                  <Markdown>{msg.content}</Markdown>
+                </div>
               </div>
-              <span className="text-[10px] mt-1 opacity-40 uppercase tracking-tighter">
+              <span className="text-[10px] mt-2 opacity-40 uppercase tracking-widest font-bold">
                 {msg.role === "user" ? "Guest" : agent.name}
               </span>
             </motion.div>
           ))}
           {isLoading && (
-            <div className="flex items-center gap-2 text-primary/60 text-xs italic">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              {agent.name} is thinking...
+            <div className="flex items-center gap-3 text-primary/60 text-xs italic animate-pulse">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {agent.name} is crafting a response...
             </div>
           )}
         </div>
 
         {/* Input */}
-        <div className="p-6 border-t border-white/10 bg-white/5">
-          <div className="relative">
+        <div className="p-8 border-t border-white/10 bg-white/5">
+          <div className="relative max-w-3xl mx-auto">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              placeholder="Type your message..."
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-6 pr-14 focus:outline-none focus:border-primary/50 transition-colors"
+              placeholder={`Message ${agent.name}...`}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 pl-8 pr-16 focus:outline-none focus:border-primary/50 transition-all shadow-inner text-lg"
             />
             <button
               onClick={sendMessage}
               disabled={isLoading}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-primary text-paper rounded-xl hover:bg-primary/80 transition-colors disabled:opacity-50"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-4 bg-primary text-paper rounded-xl hover:bg-primary/80 transition-all disabled:opacity-50 shadow-lg"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-5 h-5" />
             </button>
           </div>
+          <p className="text-center text-[10px] opacity-30 mt-4 uppercase tracking-widest">
+            AI agents may provide information based on current restaurant data.
+          </p>
         </div>
       </div>
     </motion.div>
@@ -259,6 +296,13 @@ export default function App() {
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
   const [inventory, setInventory] = useState<any[]>([]);
   const [trends, setTrends] = useState<any[]>([]);
+  const [chatHistories, setChatHistories] = useState<Record<AgentType, { role: "user" | "agent"; content: string }[]>>({
+    booking: [],
+    inventory: [],
+    pricing: [],
+    openai: [],
+    voice: []
+  });
 
   useEffect(() => {
     Promise.all([
@@ -560,6 +604,13 @@ export default function App() {
         {activeAgent && (
           <ChatInterface 
             agent={activeAgent} 
+            messages={chatHistories[activeAgent.id]}
+            onMessagesUpdate={(newMessages) => {
+              setChatHistories(prev => ({
+                ...prev,
+                [activeAgent.id]: newMessages
+              }));
+            }}
             onClose={() => setActiveAgent(null)} 
           />
         )}
