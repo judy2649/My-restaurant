@@ -327,15 +327,20 @@ export default function App() {
   return (
     <div className="min-h-screen selection:bg-primary selection:text-paper relative">
       {/* Global Background Image Overlay */}
-      <div className="fixed inset-0 z-[-1] pointer-events-none">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 2 }}
+        className="fixed inset-0 z-[-1] pointer-events-none"
+      >
         <img 
-          src="https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=2070&auto=format&fit=crop" 
-          alt="Restaurant Ambiance" 
-          className="w-full h-full object-cover opacity-20"
+          src="https://images.unsplash.com/photo-1559339352-11d035aa65de?q=80&w=1974&auto=format&fit=crop" 
+          alt="The Carnivore Atmosphere" 
+          className="w-full h-full object-cover opacity-30"
           referrerPolicy="no-referrer"
         />
-        <div className="absolute inset-0 bg-gradient-to-br from-ink via-ink/90 to-secondary/20" />
-      </div>
+        <div className="absolute inset-0 bg-gradient-to-br from-ink/95 via-ink/60 to-secondary/20" />
+      </motion.div>
 
       <AnimatePresence mode="wait">
         {view === "landing" ? (
@@ -347,14 +352,17 @@ export default function App() {
             className="relative h-screen flex flex-col items-center justify-center overflow-hidden"
           >
             {/* Background Image with Overlay */}
-            <div className="absolute inset-0 z-0">
-              <img 
-                src="https://images.unsplash.com/photo-1550966842-2849a220277c?q=80&w=2070&auto=format&fit=crop" 
-                alt="The Carnivore Experience" 
-                className="w-full h-full object-cover opacity-40 scale-105"
+            <div className="absolute inset-0 z-0 overflow-hidden">
+              <motion.img 
+                initial={{ scale: 1.1 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 10, repeat: Infinity, repeatType: "reverse", ease: "linear" }}
+                src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=1974&auto=format&fit=crop" 
+                alt="The Carnivore Grill" 
+                className="w-full h-full object-cover opacity-60"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-b from-ink via-ink/90 to-ink" />
+              <div className="absolute inset-0 bg-gradient-to-b from-ink/90 via-transparent to-ink" />
             </div>
 
             {/* Content */}
@@ -374,9 +382,9 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="text-6xl md:text-8xl font-serif font-bold mb-8 leading-tight"
+                className="text-6xl md:text-8xl font-serif font-bold mb-8 leading-tight drop-shadow-[0_0_30px_rgba(255,45,149,0.3)]"
               >
-                Welcome to our restaurant
+                Welcome to <span className="pink-purple-gradient">The Carnivore</span>
               </motion.h1>
 
               <motion.p
@@ -450,8 +458,20 @@ export default function App() {
             key="dashboard"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="p-8 md:p-12 max-w-7xl mx-auto"
+            className="p-8 md:p-12 max-w-7xl mx-auto relative min-h-screen"
           >
+            {/* Dashboard Specific Background Overlay */}
+            <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
+              <motion.img 
+                initial={{ scale: 1 }}
+                animate={{ scale: 1.1 }}
+                transition={{ duration: 20, repeat: Infinity, repeatType: "reverse", ease: "linear" }}
+                src="https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=2069&auto=format&fit=crop" 
+                alt="Dashboard Background" 
+                className="w-full h-full object-cover opacity-10"
+                referrerPolicy="no-referrer"
+              />
+            </div>
             {/* Dashboard Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
               <div>

@@ -15,7 +15,7 @@
 
 @layer base {
   body {
-    @apply bg-ink text-paper font-sans antialiased;
+    @apply bg-[#0a050f] text-paper font-sans antialiased;
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -24,7 +24,7 @@
 }
 
 .glass {
-  @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  @apply bg-white/3 backdrop-blur-lg border border-secondary/20;
 }
 
 .pink-purple-gradient {
