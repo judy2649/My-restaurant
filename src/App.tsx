@@ -107,22 +107,22 @@ const AGENTS: Agent[] = [
 
 const AgentCard = ({ agent, onClick }: { agent: Agent; onClick: () => void }) => (
   <motion.div
-    whileHover={{ y: -5, scale: 1.02 }}
+    whileHover={{ y: -8, scale: 1.02 }}
     whileTap={{ scale: 0.98 }}
     onClick={onClick}
     className={cn(
-      "p-6 rounded-2xl glass cursor-pointer group relative overflow-hidden",
-      "hover:border-primary/50 transition-all duration-300"
+      "p-8 rounded-[32px] glass-card cursor-pointer group relative overflow-hidden",
+      "hover:border-primary/50 transition-all duration-500"
     )}
   >
-    <div className={cn("absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500", agent.color)} />
+    <div className={cn("absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-700", agent.color)} />
     <div className="relative z-10">
-      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform duration-300">
+      <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
         {agent.icon}
       </div>
-      <h3 className="text-xl font-serif font-bold mb-1">{agent.name}</h3>
-      <p className="text-primary/80 text-sm font-medium mb-3">{agent.role}</p>
-      <p className="text-paper/60 text-sm leading-relaxed">{agent.description}</p>
+      <h3 className="text-2xl font-serif font-bold mb-1">{agent.name}</h3>
+      <p className="text-primary/80 text-xs font-black uppercase tracking-widest mb-4">{agent.role}</p>
+      <p className="text-paper/50 text-sm leading-relaxed line-clamp-3">{agent.description}</p>
     </div>
   </motion.div>
 );
@@ -327,20 +327,15 @@ export default function App() {
   return (
     <div className="min-h-screen selection:bg-primary selection:text-paper relative">
       {/* Global Background Image Overlay */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 2 }}
-        className="fixed inset-0 z-[-1] pointer-events-none"
-      >
+      <div className="fixed inset-0 z-[-1] pointer-events-none">
         <img 
-          src="https://images.unsplash.com/photo-1559339352-11d035aa65de?q=80&w=1974&auto=format&fit=crop" 
-          alt="The Carnivore Atmosphere" 
-          className="w-full h-full object-cover opacity-30"
+          src="https://images.unsplash.com/photo-1559339352-11d035aa65de?q=80&w=2000&auto=format&fit=crop" 
+          alt="Restaurant Ambiance" 
+          className="w-full h-full object-cover opacity-15"
           referrerPolicy="no-referrer"
         />
-        <div className="absolute inset-0 bg-gradient-to-br from-ink/95 via-ink/60 to-secondary/20" />
-      </motion.div>
+        <div className="absolute inset-0 bg-gradient-to-br from-ink via-ink/95 to-secondary/10" />
+      </div>
 
       <AnimatePresence mode="wait">
         {view === "landing" ? (
@@ -352,17 +347,14 @@ export default function App() {
             className="relative h-screen flex flex-col items-center justify-center overflow-hidden"
           >
             {/* Background Image with Overlay */}
-            <div className="absolute inset-0 z-0 overflow-hidden">
-              <motion.img 
-                initial={{ scale: 1.1 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 10, repeat: Infinity, repeatType: "reverse", ease: "linear" }}
-                src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=1974&auto=format&fit=crop" 
-                alt="The Carnivore Grill" 
-                className="w-full h-full object-cover opacity-60"
+            <div className="absolute inset-0 z-0">
+              <img 
+                src="https://images.unsplash.com/photo-1544148103-0773bf10d330?q=80&w=2000&auto=format&fit=crop" 
+                alt="The Carnivore Experience" 
+                className="w-full h-full object-cover opacity-50 scale-105"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-b from-ink/90 via-transparent to-ink" />
+              <div className="absolute inset-0 bg-gradient-to-b from-ink via-transparent to-ink" />
             </div>
 
             {/* Content */}
@@ -382,9 +374,9 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="text-6xl md:text-8xl font-serif font-bold mb-8 leading-tight drop-shadow-[0_0_30px_rgba(255,45,149,0.3)]"
+                className="text-6xl md:text-8xl font-serif font-bold mb-8 leading-tight"
               >
-                Welcome to <span className="pink-purple-gradient">The Carnivore</span>
+                Welcome to our restaurant
               </motion.h1>
 
               <motion.p
@@ -456,161 +448,180 @@ export default function App() {
         ) : (
           <motion.div
             key="dashboard"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="p-8 md:p-12 max-w-7xl mx-auto relative min-h-screen"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-6 md:p-12 max-w-7xl mx-auto space-y-12"
           >
-            {/* Dashboard Specific Background Overlay */}
-            <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
-              <motion.img 
-                initial={{ scale: 1 }}
-                animate={{ scale: 1.1 }}
-                transition={{ duration: 20, repeat: Infinity, repeatType: "reverse", ease: "linear" }}
-                src="https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=2069&auto=format&fit=crop" 
-                alt="Dashboard Background" 
-                className="w-full h-full object-cover opacity-10"
-                referrerPolicy="no-referrer"
-              />
-            </div>
             {/* Dashboard Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
-              <div>
-                <div className="flex items-center gap-2 text-primary mb-4">
-                  <Sparkles className="w-5 h-5" />
-                  <span className="uppercase tracking-[0.3em] text-[10px] font-bold">Agentic Command Center</span>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 text-primary">
+                  <div className="w-8 h-[2px] bg-primary rounded-full" />
+                  <span className="uppercase tracking-[0.4em] text-[10px] font-black">Carnivore Command</span>
                 </div>
-                <h2 className="text-5xl font-serif font-bold">Agent Dashboard</h2>
-                <p className="text-paper/50 mt-2">All chatbots online. Seamless operations in progress.</p>
+                <h2 className="text-6xl font-serif font-bold tracking-tight">The Hub</h2>
+                <p className="text-paper/40 font-medium">Monitoring the "Beast of a Feast" in real-time.</p>
               </div>
               <div className="flex items-center gap-4">
-                <div className="glass px-6 py-3 rounded-2xl flex items-center gap-3 border-primary/20">
+                <div className="glass px-6 py-3 rounded-2xl flex items-center gap-3 border-primary/20 group cursor-pointer hover:bg-white/10 transition-all">
                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  <span className="text-sm font-medium">Live AI Sync</span>
+                  <span className="text-sm font-bold tracking-wide">Live AI Sync</span>
                 </div>
                 <button 
                   onClick={() => setView("landing")}
-                  className="p-3 glass rounded-2xl hover:bg-white/10 transition-colors"
+                  className="p-4 glass rounded-2xl hover:bg-primary/20 hover:text-primary transition-all duration-300"
                 >
-                  <Settings className="w-5 h-5" />
+                  <Settings className="w-6 h-6" />
                 </button>
               </div>
             </div>
 
-            {/* System Health Sprite */}
-            <div className="mb-12 glass p-6 rounded-3xl border-primary/10 flex flex-wrap items-center gap-8">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-primary">System Health</p>
-                  <p className="text-[10px] text-paper/40">Real-time Agent Verification</p>
-                </div>
-              </div>
-              <div className="h-10 w-[1px] bg-white/10 hidden md:block" />
-              <div className="flex flex-wrap gap-4">
-                {AGENTS.map(agent => (
-                  <div key={agent.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                    <span className="text-[10px] font-medium uppercase tracking-tighter">{agent.name}</span>
-                  </div>
-                ))}
-              </div>
+            {/* Dashboard Navigation */}
+            <div className="flex items-center gap-2 p-2 glass rounded-[32px] w-fit border-white/5">
+              {["Overview", "Agents", "Inventory", "Analytics"].map((tab, i) => (
+                <button 
+                  key={tab}
+                  className={cn(
+                    "px-8 py-3 rounded-[24px] text-xs font-black uppercase tracking-widest transition-all duration-300",
+                    i === 0 ? "bg-primary text-paper shadow-lg shadow-primary/20" : "hover:bg-white/5 text-paper/40 hover:text-paper"
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
 
-            {/* Inventory Quick Look */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
-              <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                {AGENTS.map((agent) => (
-                  <AgentCard 
-                    key={agent.id} 
-                    agent={agent} 
-                    onClick={() => setActiveAgent(agent)} 
-                  />
-                ))}
+            {/* Dashboard Bento Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Hero Section - Large Feature */}
+              <div className="lg:col-span-8 relative h-[400px] rounded-[40px] overflow-hidden group shadow-2xl border border-white/10">
+                <img 
+                  src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=2000&auto=format&fit=crop" 
+                  alt="The Roasting Pit" 
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/40 to-transparent" />
+                <div className="absolute bottom-10 left-10 right-10">
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="px-3 py-1 rounded-full bg-primary text-paper text-[10px] font-black uppercase tracking-widest">Signature Experience</span>
+                    <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-paper text-[10px] font-black uppercase tracking-widest border border-white/10">Live Pit</span>
+                  </div>
+                  <h3 className="text-4xl font-serif font-bold mb-2">Charcoal Pit Roasting</h3>
+                  <p className="text-paper/70 max-w-lg leading-relaxed">Experience the authentic Maasai sword carving tradition. Our pit is currently at optimal temperature for the evening feast.</p>
+                </div>
               </div>
 
-              {/* Sidebar Stats */}
-              <div className="space-y-8">
-                <div className="glass p-8 rounded-3xl border-primary/10">
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="font-serif font-bold text-xl">Inventory Status</h4>
-                    <Warehouse className="w-5 h-5 text-primary" />
-                  </div>
+              {/* System Health Sprite - Integrated into Grid */}
+              <div className="lg:col-span-4 glass p-10 rounded-[40px] border-primary/10 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-serif font-bold text-2xl mb-2">Agent Status</h4>
+                  <p className="text-xs text-paper/40 mb-8">All systems operational and verified.</p>
                   <div className="space-y-4">
-                    {inventory.map(item => (
-                      <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
-                        <div>
-                          <p className="text-sm font-medium">{item.item}</p>
-                          <p className="text-[10px] text-paper/40 uppercase">{item.unit}</p>
+                    {AGENTS.map(agent => (
+                      <div key={agent.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
+                          <span className="text-xs font-bold uppercase tracking-widest">{agent.name}</span>
                         </div>
-                        <div className="text-right">
-                          <p className={cn(
-                            "text-sm font-bold",
-                            item.stock < 5 ? "text-primary" : "text-secondary"
-                          )}>{item.stock}</p>
-                          <div className="w-16 h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
-                            <div 
-                              className="h-full bg-primary" 
-                              style={{ width: `${Math.min((item.stock / 200) * 100, 100)}%` }} 
-                            />
-                          </div>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
+                <div className="mt-8 p-4 rounded-2xl bg-primary/10 border border-primary/20 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.2em] font-black text-primary">System Integrity: 100%</p>
+                </div>
+              </div>
 
-                <div className="glass p-8 rounded-3xl border-primary/10 bg-primary/5">
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="font-serif font-bold text-xl text-primary">Market Trends</h4>
-                    <BarChart3 className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="space-y-4">
-                    {trends.map((trend, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
-                        <span className="text-sm">{trend.item}</span>
-                        <span className={cn(
-                          "text-xs font-bold px-2 py-1 rounded-md",
-                          trend.trend === "rising" ? "bg-primary/20 text-primary" : 
-                          trend.trend === "falling" ? "bg-secondary/20 text-secondary" : "bg-white/10 text-paper/60"
-                        )}>
-                          {trend.change}
-                        </span>
-                      </div>
-                    ))}
+              {/* Agents Section */}
+              <div className="lg:col-span-12">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-3xl font-serif font-bold">Culinary AI Hub</h3>
+                  <div className="flex gap-2">
+                    <div className="w-12 h-1 bg-primary rounded-full" />
+                    <div className="w-4 h-1 bg-white/20 rounded-full" />
                   </div>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                  {AGENTS.map((agent) => (
+                    <AgentCard 
+                      key={agent.id} 
+                      agent={agent} 
+                      onClick={() => setActiveAgent(agent)} 
+                    />
+                  ))}
+                </div>
+              </div>
 
-                <div className="glass p-8 rounded-3xl border-primary/10">
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="font-serif font-bold text-xl">Carnivore Menu</h4>
-                    <UtensilsCrossed className="w-5 h-5 text-primary" />
+              {/* Stats & Trends Section */}
+              <div className="lg:col-span-6 glass p-10 rounded-[40px] border-primary/10">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h4 className="font-serif font-bold text-2xl">Inventory Status</h4>
+                    <p className="text-xs text-paper/40">Real-time stock monitoring</p>
                   </div>
-                  <div className="space-y-3">
-                    {["Beef Steaks", "Pork Spare Ribs", "Leg of Lamb", "Crocodile", "Ostrich", "Camel"].map((meat, i) => (
-                      <div key={i} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                        <span className="text-sm text-paper/80">{meat}</span>
+                  <Warehouse className="w-6 h-6 text-primary" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {inventory.map(item => (
+                    <div key={item.id} className="p-5 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-bold tracking-tight">{item.item}</p>
+                        <p className={cn(
+                          "text-xs font-black",
+                          item.stock < 10 ? "text-primary" : "text-emerald-400"
+                        )}>{item.stock} {item.unit}</p>
                       </div>
-                    ))}
-                    <div className="mt-4 p-4 rounded-2xl bg-primary/10 border border-primary/20">
-                      <p className="text-[10px] uppercase tracking-widest font-bold text-primary mb-1">Signature Experience</p>
-                      <p className="text-sm font-serif italic text-paper/90">The Dawa Cocktail & Charcoal Pit Roasting</p>
+                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min((item.stock / 200) * 100, 100)}%` }}
+                          transition={{ duration: 1.5, ease: "easeOut" }}
+                          className="h-full bg-primary" 
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
+              </div>
 
-                <div className="glass p-8 rounded-3xl border-primary/10 overflow-hidden relative group">
-                  <img 
-                    src="https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&q=80&w=800" 
-                    alt="Kitchen" 
-                    className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:scale-110 transition-transform duration-700"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="relative z-10">
-                    <h4 className="font-serif font-bold text-xl mb-2">Kitchen Live</h4>
-                    <p className="text-xs text-paper/60">Monitoring culinary excellence in real-time.</p>
+              <div className="lg:col-span-6 glass p-10 rounded-[40px] border-primary/10">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h4 className="font-serif font-bold text-2xl">Market Trends</h4>
+                    <p className="text-xs text-paper/40">Dynamic pricing insights</p>
+                  </div>
+                  <BarChart3 className="w-6 h-6 text-primary" />
+                </div>
+                <div className="space-y-4">
+                  {trends.map((trend, i) => (
+                    <div key={i} className="flex items-center justify-between p-5 rounded-3xl bg-white/5 border border-white/5 hover:translate-x-2 transition-transform">
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "w-10 h-10 rounded-2xl flex items-center justify-center",
+                          trend.trend === "rising" ? "bg-emerald-500/10 text-emerald-400" : "bg-primary/10 text-primary"
+                        )}>
+                          {trend.trend === "rising" ? <ArrowRight className="-rotate-45 w-5 h-5" /> : <ArrowRight className="rotate-45 w-5 h-5" />}
+                        </div>
+                        <span className="text-sm font-bold">{trend.item}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className={cn(
+                          "text-xs font-black px-3 py-1 rounded-full",
+                          trend.trend === "rising" ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"
+                        )}>{trend.change}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="mt-6 p-6 rounded-[32px] bg-primary/5 border border-primary/10 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative z-10">
+                      <p className="text-[10px] uppercase tracking-[0.3em] font-black text-primary mb-2">Signature Experience</p>
+                      <p className="text-lg font-serif italic text-paper/90">The Dawa Cocktail & Charcoal Pit Roasting</p>
+                    </div>
                   </div>
                 </div>
               </div>

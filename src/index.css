@@ -15,7 +15,7 @@
 
 @layer base {
   body {
-    @apply bg-[#0a050f] text-paper font-sans antialiased;
+    @apply bg-ink text-paper font-sans antialiased;
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -24,7 +24,11 @@
 }
 
 .glass {
-  @apply bg-white/3 backdrop-blur-lg border border-secondary/20;
+  @apply bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+}
+
+.glass-card {
+  @apply bg-white/10 backdrop-blur-3xl border border-white/20 shadow-2xl hover:bg-white/15 transition-all duration-500;
 }
 
 .pink-purple-gradient {
