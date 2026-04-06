@@ -192,7 +192,7 @@ const ChatInterface = ({
       let errorMessage = "An error occurred. Please check your connection.";
       
       if (error.message === "GEMINI_API_KEY_MISSING") {
-        errorMessage = "⚠️ **Configuration Error**: The `GEMINI_API_KEY` is missing. If you are on Vercel, please add it to your Environment Variables in the project settings.";
+        errorMessage = "⚠️ **Configuration Error**: The `GEMINI_API_KEY` is missing.\n\n**To fix this on Vercel:**\n1. Go to your Project Settings > Environment Variables.\n2. Add `GEMINI_API_KEY` with your key from [Google AI Studio](https://aistudio.google.com/app/apikey).\n3. **Important**: You must trigger a **New Deployment** (Redeploy) for the changes to take effect.";
       } else if (error.message?.includes("quota")) {
         errorMessage = "⚠️ **Quota Exceeded**: The AI service is currently at its limit. Please try again in a few minutes.";
       }
