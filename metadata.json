@@ -1,0 +1,8 @@
+{
+  "name": "L'Agentia - AI Gastronomy",
+  "description": "A luxury restaurant experience managed by a suite of specialized AI agents for inventory, front-of-house, and culinary excellence.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
