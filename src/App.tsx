@@ -158,7 +158,12 @@ const ChatInterface = ({
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY_MISSING");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
@@ -176,9 +181,23 @@ const ChatInterface = ({
 
       const text = response.text || "I apologize, I am unable to process that request at the moment.";
       onMessagesUpdate([...newMessages, { role: "agent", content: text }]);
-    } catch (error) {
-      console.error("Chat error:", error);
-      onMessagesUpdate([...newMessages, { role: "agent", content: "An error occurred. Please check your connection." }]);
+    } catch (error: any) {
+      console.error("Full Chat Error Context:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        agent: agent.name,
+        timestamp: new Date().toISOString()
+      });
+      let errorMessage = "An error occurred. Please check your connection.";
+      
+      if (error.message === "GEMINI_API_KEY_MISSING") {
+        errorMessage = "⚠️ **Configuration Error**: The `GEMINI_API_KEY` is missing. If you are on Vercel, please add it to your Environment Variables in the project settings.";
+      } else if (error.message?.includes("quota")) {
+        errorMessage = "⚠️ **Quota Exceeded**: The AI service is currently at its limit. Please try again in a few minutes.";
+      }
+      
+      onMessagesUpdate([...newMessages, { role: "agent", content: errorMessage }]);
     } finally {
       setIsLoading(false);
     }
