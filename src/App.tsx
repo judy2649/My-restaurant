@@ -700,7 +700,7 @@ export default function App() {
                 transition={{ delay: 0.4 }}
                 className="text-6xl md:text-8xl font-serif font-bold mb-8 leading-tight"
               >
-                Welcome to our restaurant
+                The Carnivore Restaurant
               </motion.h1>
 
               <motion.p
@@ -781,9 +781,9 @@ export default function App() {
               <div className="space-y-2">
                 <div className="flex items-center gap-3 text-primary">
                   <div className="w-8 h-[2px] bg-primary rounded-full" />
-                  <span className="uppercase tracking-[0.4em] text-[10px] font-black">Carnivore Command</span>
+                  <span className="uppercase tracking-[0.4em] text-[10px] font-black">The Carnivore Restaurant</span>
                 </div>
-                <h2 className="text-6xl font-serif font-bold tracking-tight">The Hub</h2>
+                <h2 className="text-6xl font-serif font-bold tracking-tight">Operations Hub</h2>
                 <p className="text-paper/40 font-medium">Monitoring the "Beast of a Feast" in real-time.</p>
               </div>
               <div className="flex items-center gap-4">

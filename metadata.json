@@ -1,6 +1,6 @@
 {
-  "name": "L'Agentia - AI Gastronomy",
-  "description": "A luxury restaurant experience managed by a suite of specialized AI agents for inventory, front-of-house, and culinary excellence.",
+  "name": "The Carnivore Restaurant",
+  "description": "The ultimate 'Beast of a Feast' experience in Nairobi, powered by advanced AI agents for reservations, inventory, pricing, and staffing.",
   "requestFramePermissions": [
     "camera",
     "microphone"
