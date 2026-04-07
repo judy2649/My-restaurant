@@ -15,7 +15,11 @@ import {
   UserCheck,
   X,
   Send,
-  Loader2
+  Loader2,
+  Users,
+  TrendingUp,
+  Activity,
+  FileText
 } from "lucide-react";
 import { GoogleGenAI, Type } from "@google/genai";
 import Markdown from "react-markdown";
@@ -23,7 +27,7 @@ import { cn } from "@/src/lib/utils";
 import confetti from "canvas-confetti";
 
 // --- Types ---
-type AgentType = "booking" | "inventory" | "pricing" | "openai" | "voice";
+type AgentType = "booking" | "inventory" | "pricing" | "openai" | "voice" | "scheduling";
 
 interface Reservation {
   id: string;
@@ -48,11 +52,32 @@ interface InventoryItem {
   minLevel: number;
 }
 
+interface Shift {
+  id: string;
+  staffName: string;
+  role: string;
+  start: string;
+  end: string;
+}
+
 interface RestaurantState {
   reservations: Reservation[];
   orders: Order[];
   inventory: InventoryItem[];
   marketPrices: { [key: string]: number };
+  staffing: {
+    shifts: Shift[];
+    optimalStaffCount: number;
+  };
+  financials: {
+    dailyRevenue: number;
+    dailyCOGS: number;
+  };
+  systemHealth: {
+    latency: number;
+    dbStatus: "online" | "offline";
+    ticketingStatus: "online" | "offline";
+  };
 }
 
 interface Agent {
@@ -86,25 +111,62 @@ const AGENTS: Agent[] = [
   {
     id: "inventory",
     name: "Stockton",
-    role: "Inventory Agent",
+    role: "Inventory & Operations Agent",
     icon: <Warehouse className="w-6 h-6" />,
-    description: "Monitors stock levels, predicts shortages, and manages suppliers.",
-    systemPrompt: `You are Stockton, the Inventory Agent for The Carnivore Restaurant. 
-    You monitor stocks of high-quality meats (Wagyu, Crocodile, Ostrich, Beef, Pork), charcoal for the roasting pit, and ingredients for the Dawa cocktail.
-    Your role: Support staff by monitoring stock levels and providing clear updates. 
-    Guidelines: Be professional and concise. Escalate logistical issues. Never invent stock data.`,
+    description: "Manages stock, COGS vs Revenue, system health, and vendor invoicing.",
+    systemPrompt: `You are Stockton, the Inventory & Operations Agent for The Carnivore Restaurant. 
+    Your expanded role includes:
+    1. Stock Management: Monitor meats (Wagyu, Crocodile, Ostrich), charcoal, and Dawa mix.
+    2. Financial Analysis: Compare daily Cost of Goods Sold (COGS) vs Revenue to ensure profitability.
+    3. System Health: Monitor system latency and the status of the ticketing site and database.
+    4. Vendor Management: Generate vendor invoices and prepare PDF summaries for suppliers.
+    
+    Guidelines: Be technical, precise, and proactive. Report any system pings or financial discrepancies immediately.`,
     color: "from-purple-500/20 to-pink-600/20"
+  },
+  {
+    id: "scheduling",
+    name: "Atlas",
+    role: "Staff & Scheduling Agent",
+    icon: <Users className="w-6 h-6" />,
+    description: "Analyzes historical data to optimize staff shifts and scheduling.",
+    systemPrompt: `You are Atlas, the Staff & Scheduling Agent for The Carnivore Restaurant.
+    Your role:
+    1. Shift Optimization: Analyze historical guest data (reservations/orders) to suggest optimal staff counts.
+    2. Schedule Management: Create and update staff shifts.
+    3. Performance Tracking: Monitor staffing efficiency.
+    
+    Guidelines: Use data to justify scheduling decisions. Be organized and professional.`,
+    color: "from-emerald-500/20 to-teal-600/20"
   },
   {
     id: "pricing",
     name: "Valora",
     role: "Pricing Agent",
     icon: <BarChart3 className="w-6 h-6" />,
-    description: "Monitors market prices and adjusts menu pricing for optimal profitability.",
+    description: "Expert in menu pricing, market trends, and revenue optimization.",
     systemPrompt: `You are Valora, the Pricing Agent for The Carnivore Restaurant. 
-    The 'Beast of a Feast' is typically priced around 5,000 - 6,000 KES ($40-$50 USD).
-    Your role: Monitor market trends and provide data-driven pricing insights. 
-    Guidelines: Provide professional, strategic responses. Escalate major pricing decisions.`,
+    Your primary role is to provide accurate pricing information to both customers and staff, and to optimize our menu for profitability.
+
+    Current Menu & Base Pricing:
+    - Beast of a Feast (Full Experience): 5,500 KES
+    - Dawa Cocktail: 850 KES
+    - Exotic Platter (Specialty): 7,200 KES
+    - Vegetarian Feast: 3,500 KES
+    - Children's Feast (Under 12): 2,500 KES
+    - Dessert Selection: 600 - 1,200 KES
+    - Local Beers: 500 KES
+    - Soft Drinks: 300 KES
+
+    Your role: 
+    1. Provide detailed price lists and menu information when asked.
+    2. Monitor market trends and suggest or implement price adjustments.
+    3. Explain the value of our 'Beast of a Feast' experience.
+    
+    Guidelines: 
+    - Always refer to the 'Current Restaurant State' provided in your context for the most up-to-date live prices.
+    - Be professional, data-driven, and helpful. 
+    - If a price is not in the state or this prompt, provide a reasonable estimate based on the 'Beast of a Feast' baseline but mention it's an estimate.`,
     color: "from-pink-400/20 to-purple-500/20"
   },
   {
@@ -266,6 +328,41 @@ const ChatInterface = ({
                       newPrice: { type: Type.NUMBER }
                     },
                     required: ["item", "newPrice"]
+                  }
+                },
+                {
+                  name: "update_schedule",
+                  description: "Create or update a staff shift.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      staffName: { type: Type.STRING },
+                      role: { type: Type.STRING },
+                      start: { type: Type.STRING, description: "Start time (HH:MM)" },
+                      end: { type: Type.STRING, description: "End time (HH:MM)" }
+                    },
+                    required: ["staffName", "role", "start", "end"]
+                  }
+                },
+                {
+                  name: "generate_invoice",
+                  description: "Generate a vendor invoice and prepare a PDF summary.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      vendor: { type: Type.STRING },
+                      amount: { type: Type.NUMBER },
+                      items: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    },
+                    required: ["vendor", "amount", "items"]
+                  }
+                },
+                {
+                  name: "check_system_health",
+                  description: "Ping the ticketing site and database to check latency and status.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
                   }
                 }
               ]
@@ -442,7 +539,27 @@ export default function App() {
     marketPrices: {
       "Beast of a Feast": 5500,
       "Dawa Cocktail": 850,
-      "Exotic Platter": 7200
+      "Exotic Platter": 7200,
+      "Vegetarian Feast": 3500,
+      "Children's Feast": 2500,
+      "Local Beer": 500,
+      "Soft Drink": 300
+    },
+    staffing: {
+      shifts: [
+        { id: "s1", staffName: "Kamau", role: "Server", start: "17:00", end: "23:00" },
+        { id: "s2", staffName: "Achieng", role: "Chef", start: "16:00", end: "22:00" }
+      ],
+      optimalStaffCount: 12
+    },
+    financials: {
+      dailyRevenue: 125000,
+      dailyCOGS: 45000
+    },
+    systemHealth: {
+      latency: 45,
+      dbStatus: "online",
+      ticketingStatus: "online"
     }
   });
 
@@ -451,7 +568,8 @@ export default function App() {
     inventory: [],
     pricing: [],
     openai: [],
-    voice: []
+    voice: [],
+    scheduling: []
   });
 
   const handleOperation = (type: string, data: any) => {
@@ -487,6 +605,26 @@ export default function App() {
           break;
         case "adjust_price":
           newState.marketPrices = { ...prev.marketPrices, [data.item]: data.newPrice };
+          break;
+        case "update_schedule":
+          newState.staffing = {
+            ...prev.staffing,
+            shifts: [...prev.staffing.shifts, {
+              id: Math.random().toString(36).substr(2, 9),
+              ...data
+            }]
+          };
+          break;
+        case "generate_invoice":
+          // In a real app, this would trigger a PDF generation service
+          console.log("Generating invoice for:", data.vendor);
+          break;
+        case "check_system_health":
+          newState.systemHealth = {
+            latency: Math.floor(Math.random() * 100),
+            dbStatus: Math.random() > 0.1 ? "online" : "offline",
+            ticketingStatus: Math.random() > 0.1 ? "online" : "offline"
+          };
           break;
       }
       return newState;
@@ -679,6 +817,92 @@ export default function App() {
 
             {/* Dashboard Bento Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Financial Overview */}
+              <div className="lg:col-span-4 glass p-8 rounded-[40px] border-primary/10 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="font-serif font-bold text-2xl">Financials</h4>
+                    <TrendingUp className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">Daily Revenue</p>
+                      <p className="text-3xl font-serif font-bold text-emerald-400">{restaurantState.financials.dailyRevenue.toLocaleString()} KES</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">Cost of Goods Sold (COGS)</p>
+                      <p className="text-3xl font-serif font-bold text-primary">{restaurantState.financials.dailyCOGS.toLocaleString()} KES</p>
+                    </div>
+                    <div className="pt-4 border-t border-white/5">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">Gross Profit Margin</p>
+                      <p className="text-xl font-bold">
+                        {(((restaurantState.financials.dailyRevenue - restaurantState.financials.dailyCOGS) / restaurantState.financials.dailyRevenue) * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* System Health */}
+              <div className="lg:col-span-4 glass p-8 rounded-[40px] border-primary/10 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="font-serif font-bold text-2xl">System Health</h4>
+                    <Activity className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
+                      <span className="text-xs font-bold uppercase tracking-widest">Latency</span>
+                      <span className="text-xs font-black text-emerald-400">{restaurantState.systemHealth.latency}ms</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
+                      <span className="text-xs font-bold uppercase tracking-widest">Database</span>
+                      <span className={cn(
+                        "text-[10px] uppercase font-black px-2 py-1 rounded-md",
+                        restaurantState.systemHealth.dbStatus === "online" ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"
+                      )}>{restaurantState.systemHealth.dbStatus}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
+                      <span className="text-xs font-bold uppercase tracking-widest">Ticketing Site</span>
+                      <span className={cn(
+                        "text-[10px] uppercase font-black px-2 py-1 rounded-md",
+                        restaurantState.systemHealth.ticketingStatus === "online" ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"
+                      )}>{restaurantState.systemHealth.ticketingStatus}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-6 p-4 rounded-2xl bg-primary/10 border border-primary/20 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.2em] font-black text-primary">Last Ping: Just Now</p>
+                </div>
+              </div>
+
+              {/* Staffing & Shifts */}
+              <div className="lg:col-span-4 glass p-8 rounded-[40px] border-primary/10 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="font-serif font-bold text-2xl">Staffing</h4>
+                    <Users className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2 scrollbar-hide">
+                    {restaurantState.staffing.shifts.map(shift => (
+                      <div key={shift.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold">{shift.staffName}</p>
+                          <p className="text-[10px] text-paper/40">{shift.role}</p>
+                        </div>
+                        <span className="text-[10px] font-black text-primary">{shift.start} - {shift.end}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-6 pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-widest font-black text-paper/40">Optimal Staffing</p>
+                    <p className="text-lg font-bold text-emerald-400">{restaurantState.staffing.optimalStaffCount} Agents</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Hero Section - Large Feature */}
               <div className="lg:col-span-8 relative h-[400px] rounded-[40px] overflow-hidden group shadow-2xl border border-white/10">
                 <img 
@@ -810,6 +1034,23 @@ export default function App() {
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+              <div className="lg:col-span-12 glass p-10 rounded-[40px] border-primary/10">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h4 className="font-serif font-bold text-2xl">Menu Pricing</h4>
+                    <p className="text-xs text-paper/40">Live menu rates managed by Valora</p>
+                  </div>
+                  <BarChart3 className="w-6 h-6 text-primary" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                  {Object.entries(restaurantState.marketPrices).map(([item, price]) => (
+                    <div key={item} className="p-4 rounded-2xl bg-white/5 border border-white/5 text-center hover:bg-white/10 transition-all">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">{item}</p>
+                      <p className="text-lg font-serif font-bold text-primary">{price.toLocaleString()} KES</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
