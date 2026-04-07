@@ -14,6 +14,7 @@ async function startServer() {
 
   // API Routes
   app.get("/api/health", (req, res) => {
+    console.log("Health check pinged at:", new Date().toISOString());
     res.json({ status: "ok", message: "Agentic Restaurant Backend is live." });
   });
 
