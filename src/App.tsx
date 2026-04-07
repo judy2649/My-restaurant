@@ -17,13 +17,43 @@ import {
   Send,
   Loader2
 } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import Markdown from "react-markdown";
 import { cn } from "@/src/lib/utils";
 import confetti from "canvas-confetti";
 
 // --- Types ---
 type AgentType = "booking" | "inventory" | "pricing" | "openai" | "voice";
+
+interface Reservation {
+  id: string;
+  name: string;
+  date: string;
+  guests: number;
+  status: "confirmed" | "pending";
+}
+
+interface Order {
+  id: string;
+  items: { name: string; quantity: number }[];
+  status: "preparing" | "ready" | "served";
+  timestamp: string;
+}
+
+interface InventoryItem {
+  id: string;
+  name: string;
+  stock: number;
+  unit: string;
+  minLevel: number;
+}
+
+interface RestaurantState {
+  reservations: Reservation[];
+  orders: Order[];
+  inventory: InventoryItem[];
+  marketPrices: { [key: string]: number };
+}
 
 interface Agent {
   id: AgentType;
@@ -131,12 +161,16 @@ const ChatInterface = ({
   agent, 
   messages, 
   onMessagesUpdate, 
-  onClose 
+  onClose,
+  onOperation,
+  restaurantState
 }: { 
   agent: Agent; 
   messages: { role: "user" | "agent"; content: string }[];
   onMessagesUpdate: (msgs: { role: "user" | "agent"; content: string }[]) => void;
   onClose: () => void;
+  onOperation: (type: string, data: any) => void;
+  restaurantState: RestaurantState;
 }) => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -173,14 +207,89 @@ const ChatInterface = ({
           }))
         ],
         config: {
-          systemInstruction: agent.systemPrompt,
-          temperature: 0.7,
-          topP: 0.95,
+          systemInstruction: agent.systemPrompt + `\n\nCurrent Restaurant State: ${JSON.stringify(restaurantState)}`,
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: "create_reservation",
+                  description: "Create a new table reservation for a guest.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING, description: "Name of the guest" },
+                      date: { type: Type.STRING, description: "ISO date and time of reservation" },
+                      guests: { type: Type.NUMBER, description: "Number of guests" }
+                    },
+                    required: ["name", "date", "guests"]
+                  }
+                },
+                {
+                  name: "place_order",
+                  description: "Place a new food or drink order.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      items: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            name: { type: Type.STRING },
+                            quantity: { type: Type.NUMBER }
+                          }
+                        }
+                      }
+                    },
+                    required: ["items"]
+                  }
+                },
+                {
+                  name: "update_inventory",
+                  description: "Update stock levels for an item.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      item: { type: Type.STRING },
+                      change: { type: Type.NUMBER, description: "Amount to add (positive) or remove (negative)" }
+                    },
+                    required: ["item", "change"]
+                  }
+                },
+                {
+                  name: "adjust_price",
+                  description: "Change the price of a menu item.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      item: { type: Type.STRING },
+                      newPrice: { type: Type.NUMBER }
+                    },
+                    required: ["item", "newPrice"]
+                  }
+                }
+              ]
+            }
+          ]
         },
       });
 
-      const text = response.text || "I apologize, I am unable to process that request at the moment.";
-      onMessagesUpdate([...newMessages, { role: "agent", content: text }]);
+      const candidate = response.candidates?.[0];
+      const functionCalls = candidate?.content?.parts?.filter((p: any) => p.functionCall);
+
+      if (functionCalls && functionCalls.length > 0) {
+        for (const callPart of functionCalls) {
+          const call = callPart.functionCall;
+          onOperation(call.name, call.args);
+          
+          // For simplicity in this demo, we'll just acknowledge the action
+          const successMsg = `[System: ${call.name} executed successfully]`;
+          onMessagesUpdate([...newMessages, { role: "agent", content: `I've successfully processed that operation: ${call.name}. Is there anything else you need?` }]);
+        }
+      } else {
+        const text = response.text || "I apologize, I am unable to process that request at the moment.";
+        onMessagesUpdate([...newMessages, { role: "agent", content: text }]);
+      }
     } catch (error: any) {
       console.error("Full Chat Error Context:", {
         message: error.message,
@@ -313,8 +422,30 @@ const ChatInterface = ({
 export default function App() {
   const [view, setView] = useState<"landing" | "dashboard">("landing");
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [trends, setTrends] = useState<any[]>([]);
+  
+  // --- Restaurant Operations State ---
+  const [restaurantState, setRestaurantState] = useState<RestaurantState>({
+    reservations: [
+      { id: "1", name: "John Doe", date: "2026-04-07T19:00", guests: 4, status: "confirmed" },
+      { id: "2", name: "Jane Smith", date: "2026-04-07T20:30", guests: 2, status: "confirmed" }
+    ],
+    orders: [
+      { id: "101", items: [{ name: "Beast of a Feast", quantity: 2 }], status: "preparing", timestamp: new Date().toISOString() }
+    ],
+    inventory: [
+      { id: "inv1", name: "Beef Sirloin", stock: 120, unit: "kg", minLevel: 50 },
+      { id: "inv2", name: "Pork Spare Ribs", stock: 85, unit: "kg", minLevel: 30 },
+      { id: "inv3", name: "Crocodile Meat", stock: 15, unit: "kg", minLevel: 10 },
+      { id: "inv4", name: "Charcoal", stock: 500, unit: "kg", minLevel: 200 },
+      { id: "inv5", name: "Dawa Mix", stock: 45, unit: "L", minLevel: 15 }
+    ],
+    marketPrices: {
+      "Beast of a Feast": 5500,
+      "Dawa Cocktail": 850,
+      "Exotic Platter": 7200
+    }
+  });
+
   const [chatHistories, setChatHistories] = useState<Record<AgentType, { role: "user" | "agent"; content: string }[]>>({
     booking: [],
     inventory: [],
@@ -323,15 +454,51 @@ export default function App() {
     voice: []
   });
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/inventory").then(res => res.json()),
-      fetch("/api/market-trends").then(res => res.json())
-    ]).then(([inv, trendData]) => {
-      setInventory(inv);
-      setTrends(trendData);
-    }).catch(err => console.error("Failed to fetch data:", err));
-  }, []);
+  const handleOperation = (type: string, data: any) => {
+    setRestaurantState(prev => {
+      const newState = { ...prev };
+      switch (type) {
+        case "create_reservation":
+          newState.reservations = [...prev.reservations, {
+            id: Math.random().toString(36).substr(2, 9),
+            ...data,
+            status: "confirmed"
+          }];
+          break;
+        case "place_order":
+          newState.orders = [...prev.orders, {
+            id: Math.random().toString(36).substr(2, 9),
+            items: data.items,
+            status: "preparing",
+            timestamp: new Date().toISOString()
+          }];
+          // Deduct inventory (simplified)
+          newState.inventory = prev.inventory.map(item => {
+            if (item.name.toLowerCase().includes("beef")) return { ...item, stock: item.stock - 2 };
+            return item;
+          });
+          break;
+        case "update_inventory":
+          newState.inventory = prev.inventory.map(item => 
+            item.name.toLowerCase() === data.item.toLowerCase() 
+              ? { ...item, stock: item.stock + data.change }
+              : item
+          );
+          break;
+        case "adjust_price":
+          newState.marketPrices = { ...prev.marketPrices, [data.item]: data.newPrice };
+          break;
+      }
+      return newState;
+    });
+    
+    confetti({
+      particleCount: 150,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ["#FF2D95", "#9D4EDD", "#FFFFFF"]
+    });
+  };
 
   const launchDashboard = () => {
     confetti({
@@ -585,21 +752,24 @@ export default function App() {
                   <Warehouse className="w-6 h-6 text-primary" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {inventory.map(item => (
+                  {restaurantState.inventory.map(item => (
                     <div key={item.id} className="p-5 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group">
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-bold tracking-tight">{item.item}</p>
+                        <p className="text-sm font-bold tracking-tight">{item.name}</p>
                         <p className={cn(
                           "text-xs font-black",
-                          item.stock < 10 ? "text-primary" : "text-emerald-400"
+                          item.stock < item.minLevel ? "text-primary" : "text-emerald-400"
                         )}>{item.stock} {item.unit}</p>
                       </div>
                       <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
-                          animate={{ width: `${Math.min((item.stock / 200) * 100, 100)}%` }}
+                          animate={{ width: `${Math.min((item.stock / (item.minLevel * 3)) * 100, 100)}%` }}
                           transition={{ duration: 1.5, ease: "easeOut" }}
-                          className="h-full bg-primary" 
+                          className={cn(
+                            "h-full",
+                            item.stock < item.minLevel ? "bg-primary" : "bg-emerald-500"
+                          )} 
                         />
                       </div>
                     </div>
@@ -610,37 +780,35 @@ export default function App() {
               <div className="lg:col-span-6 glass p-10 rounded-[40px] border-primary/10">
                 <div className="flex items-center justify-between mb-8">
                   <div>
-                    <h4 className="font-serif font-bold text-2xl">Market Trends</h4>
-                    <p className="text-xs text-paper/40">Dynamic pricing insights</p>
+                    <h4 className="font-serif font-bold text-2xl">Live Operations</h4>
+                    <p className="text-xs text-paper/40">Active orders and reservations</p>
                   </div>
-                  <BarChart3 className="w-6 h-6 text-primary" />
+                  <ClipboardList className="w-6 h-6 text-primary" />
                 </div>
-                <div className="space-y-4">
-                  {trends.map((trend, i) => (
-                    <div key={i} className="flex items-center justify-between p-5 rounded-3xl bg-white/5 border border-white/5 hover:translate-x-2 transition-transform">
-                      <div className="flex items-center gap-4">
-                        <div className={cn(
-                          "w-10 h-10 rounded-2xl flex items-center justify-center",
-                          trend.trend === "rising" ? "bg-emerald-500/10 text-emerald-400" : "bg-primary/10 text-primary"
-                        )}>
-                          {trend.trend === "rising" ? <ArrowRight className="-rotate-45 w-5 h-5" /> : <ArrowRight className="rotate-45 w-5 h-5" />}
+                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest font-black text-primary/60">Recent Orders</p>
+                    {restaurantState.orders.slice(-3).reverse().map(order => (
+                      <div key={order.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold">{order.items.map(i => `${i.quantity}x ${i.name}`).join(", ")}</p>
+                          <p className="text-[10px] text-paper/40">{new Date(order.timestamp).toLocaleTimeString()}</p>
                         </div>
-                        <span className="text-sm font-bold">{trend.item}</span>
+                        <span className="text-[10px] uppercase font-black px-2 py-1 bg-primary/20 text-primary rounded-md">{order.status}</span>
                       </div>
-                      <div className="text-right">
-                        <span className={cn(
-                          "text-xs font-black px-3 py-1 rounded-full",
-                          trend.trend === "rising" ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"
-                        )}>{trend.change}</span>
+                    ))}
+                  </div>
+                  <div className="space-y-2 mt-6">
+                    <p className="text-[10px] uppercase tracking-widest font-black text-emerald-500/60">Upcoming Reservations</p>
+                    {restaurantState.reservations.slice(-3).reverse().map(res => (
+                      <div key={res.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold">{res.name}</p>
+                          <p className="text-[10px] text-paper/40">{new Date(res.date).toLocaleString()}</p>
+                        </div>
+                        <span className="text-[10px] font-black text-emerald-400">{res.guests} Guests</span>
                       </div>
-                    </div>
-                  ))}
-                  <div className="mt-6 p-6 rounded-[32px] bg-primary/5 border border-primary/10 relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="relative z-10">
-                      <p className="text-[10px] uppercase tracking-[0.3em] font-black text-primary mb-2">Signature Experience</p>
-                      <p className="text-lg font-serif italic text-paper/90">The Dawa Cocktail & Charcoal Pit Roasting</p>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -662,6 +830,8 @@ export default function App() {
               }));
             }}
             onClose={() => setActiveAgent(null)} 
+            onOperation={handleOperation}
+            restaurantState={restaurantState}
           />
         )}
       </AnimatePresence>
