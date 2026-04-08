@@ -121,7 +121,7 @@ const AGENTS: Agent[] = [
     Experience: Meats are roasted on Maasai swords over a charcoal pit. Guests use a white flag to signal when they are full.
     Your role: Handle reservations, provide menu details, and manage guest inquiries with a friendly, professional Kenyan hospitality tone. 
     Guidelines: Provide clear, polite responses. Offer dietary guidance based on our meat-heavy menu. Escalate complex issues to human staff. Never invent data.`,
-    color: "from-pink-500/20 to-purple-600/20"
+    color: "from-primary/20 to-accent/20"
   },
   {
     id: "inventory",
@@ -137,7 +137,7 @@ const AGENTS: Agent[] = [
     4. Vendor Management: Generate vendor invoices and prepare PDF summaries for suppliers.
     
     Guidelines: Be technical, precise, and proactive. Report any system pings or financial discrepancies immediately.`,
-    color: "from-purple-500/20 to-pink-600/20"
+    color: "from-accent/20 to-secondary/20"
   },
   {
     id: "scheduling",
@@ -153,7 +153,7 @@ const AGENTS: Agent[] = [
     4. Workflow Creation: After resolving an operational issue or planning a shift, create a formal workflow to record the steps taken or planned.
     
     Guidelines: Use data to justify scheduling decisions. Be organized and professional.`,
-    color: "from-emerald-500/20 to-teal-600/20"
+    color: "from-primary/20 to-grey/20"
   },
   {
     id: "pricing",
@@ -184,7 +184,7 @@ const AGENTS: Agent[] = [
     - Always refer to the 'Current Restaurant State' provided in your context for the most up-to-date live prices.
     - Be professional, data-driven, and helpful. 
     - If a price is not in the state or this prompt, provide a reasonable estimate based on the 'Beast of a Feast' baseline but mention it's an estimate.`,
-    color: "from-pink-400/20 to-purple-500/20"
+    color: "from-secondary/20 to-accent/20"
   },
   {
     id: "openai",
@@ -196,7 +196,7 @@ const AGENTS: Agent[] = [
     You help with general inquiries about Nairobi tourism, the history of the restaurant (opened in 1980), and creative tasks.
     Your role: Support customers and staff with general info. 
     Guidelines: Be polite, professional, and helpful. Escalate if unsure.`,
-    color: "from-purple-400/20 to-pink-500/20"
+    color: "from-accent/20 to-primary/20"
   },
   {
     id: "voice",
@@ -208,7 +208,7 @@ const AGENTS: Agent[] = [
     You handle quick order tracking and real-time guest communication.
     Your role: Provide fast, polite, and professional responses. 
     Guidelines: Maintain a helpful tone. Escalate communication issues.`,
-    color: "from-pink-600/20 to-purple-700/20"
+    color: "from-secondary/20 to-primary/20"
   }
 ];
 
@@ -279,9 +279,11 @@ const ChatInterface = ({
       }
 
       const ai = new GoogleGenAI({ apiKey });
+      const currentDateTime = new Date().toLocaleString();
       
       // Add a placeholder message for the agent that we will update with the stream
       let currentResponseText = "";
+      let functionCalls: any[] = [];
       const initialMessages = [...newMessages, { role: "agent" as const, content: "" }];
       onMessagesUpdate(initialMessages);
 
@@ -294,7 +296,7 @@ const ChatInterface = ({
           }))
         ],
         config: {
-          systemInstruction: agent.systemPrompt + `\n\nCurrent Restaurant State: ${JSON.stringify(restaurantState)}`,
+          systemInstruction: agent.systemPrompt + `\n\nCurrent Date/Time: ${currentDateTime}\n\nCurrent Restaurant State: ${JSON.stringify(restaurantState)}`,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [
             {
@@ -418,20 +420,31 @@ const ChatInterface = ({
         },
       });
 
-      let finalResponse = null;
       for await (const chunk of responseStream) {
-        if (chunk.text) {
-          currentResponseText += chunk.text;
-          onMessagesUpdate([...newMessages, { role: "agent", content: currentResponseText }]);
+        try {
+          const text = chunk.text;
+          if (text) {
+            currentResponseText += text;
+            onMessagesUpdate([...newMessages, { role: "agent", content: currentResponseText }]);
+          }
+        } catch (e) {
+          // No text in this chunk
         }
-        finalResponse = chunk;
+
+        const calls = chunk.functionCalls;
+        if (calls) {
+          functionCalls.push(...calls);
+        }
       }
 
-      if (finalResponse && finalResponse.functionCalls) {
-        for (const call of finalResponse.functionCalls) {
+      if (functionCalls.length > 0) {
+        const updatedMessages = [...newMessages];
+        for (const call of functionCalls) {
           onOperation(call.name, call.args);
-          onMessagesUpdate([...newMessages, { role: "agent", content: `I've successfully processed that operation: ${call.name}. Is there anything else you need?` }]);
+          updatedMessages.push({ role: "agent", content: `[System] Executing ${call.name.replace(/_/g, ' ')}...` });
         }
+        updatedMessages.push({ role: "agent", content: "I've successfully processed your request. Is there anything else I can help you with?" });
+        onMessagesUpdate(updatedMessages);
       } else if (currentResponseText) {
         // Log general assistance to workflows
         onOperation("agent_consultation", { summary: currentResponseText.slice(0, 100) + "..." });
@@ -798,7 +811,7 @@ export default function App() {
                 transition={{ delay: 0.4 }}
                 className="text-6xl md:text-8xl font-serif font-bold mb-8 leading-tight"
               >
-                The Carnivore Restaurant
+                The <span className="brand-gradient italic">Carnivore</span> Restaurant
               </motion.h1>
 
               <motion.p
