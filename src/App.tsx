@@ -74,6 +74,15 @@ interface Workflow {
   createdAt: string;
 }
 
+interface Invoice {
+  id: string;
+  vendor: string;
+  amount: number;
+  items: string[];
+  status: "pending" | "paid";
+  createdAt: string;
+}
+
 interface RestaurantState {
   reservations: Reservation[];
   orders: Order[];
@@ -93,6 +102,7 @@ interface RestaurantState {
     ticketingStatus: "online" | "offline";
   };
   workflows: Workflow[];
+  invoices: Invoice[];
 }
 
 interface Agent {
@@ -634,7 +644,8 @@ export default function App() {
       dbStatus: "online",
       ticketingStatus: "online"
     },
-    workflows: []
+    workflows: [],
+    invoices: []
   });
 
   const [chatHistories, setChatHistories] = useState<Record<AgentType, { role: "user" | "agent"; content: string }[]>>({
@@ -653,6 +664,10 @@ export default function App() {
       // Auto-record operation in workflows
       if (type !== "create_workflow") {
         const opName = type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        const description = type === "agent_consultation" && data?.summary 
+          ? `Consultation: ${data.summary}`
+          : `Agent ${activeAgent?.name || 'System'} performed ${type.replace(/_/g, ' ')}. Details: ${JSON.stringify(data)}`;
+
         const newWorkflow = {
           id: Math.random().toString(36).substr(2, 9),
           title: `${opName} Execution`,
@@ -661,7 +676,7 @@ export default function App() {
           steps: [
             { 
               id: "step-1", 
-              description: `Agent ${activeAgent?.name || 'System'} performed ${type.replace(/_/g, ' ')}.`, 
+              description, 
               status: "completed" as const 
             }
           ]
@@ -710,8 +725,14 @@ export default function App() {
           };
           break;
         case "generate_invoice":
-          // In a real app, this would trigger a PDF generation service
-          console.log("Generating invoice for:", data.vendor);
+          newState.invoices = [{
+            id: Math.random().toString(36).substr(2, 9),
+            vendor: data.vendor,
+            amount: data.amount,
+            items: data.items,
+            status: "pending",
+            createdAt: new Date().toISOString()
+          }, ...prev.invoices];
           break;
         case "check_system_health":
           newState.systemHealth = {
@@ -904,6 +925,7 @@ export default function App() {
                   { name: "Inventory", icon: <Warehouse className="w-3 h-3" /> },
                   { name: "Workflows", icon: <FileText className="w-3 h-3" /> },
                   { name: "Financials", icon: <TrendingUp className="w-3 h-3" /> },
+                  { name: "Staffing", icon: <Users className="w-3 h-3" /> },
                 ].map((item) => (
                   <button 
                     key={item.name}
@@ -1151,20 +1173,89 @@ export default function App() {
 
                   {/* Financials Detail (Only in Financials tab) */}
                   {activeTab === "Financials" && (
-                    <div className="lg:col-span-12 glass p-10 rounded-[40px] border-white/5">
-                      <h4 className="font-serif font-bold text-2xl mb-8">Financial Performance</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="p-8 rounded-3xl bg-white/5 border border-white/5">
-                          <p className="text-xs font-bold opacity-40 mb-2 uppercase tracking-widest">Gross Revenue</p>
-                          <p className="text-4xl font-serif font-bold text-emerald-400">{restaurantState.financials.dailyRevenue.toLocaleString()} KES</p>
+                    <div className="lg:col-span-12 space-y-8">
+                      <div className="glass p-10 rounded-[40px] border-white/5">
+                        <h4 className="font-serif font-bold text-2xl mb-8">Financial Performance</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div className="p-8 rounded-3xl bg-white/5 border border-white/5">
+                            <p className="text-xs font-bold opacity-40 mb-2 uppercase tracking-widest">Gross Revenue</p>
+                            <p className="text-4xl font-serif font-bold text-emerald-400">{restaurantState.financials.dailyRevenue.toLocaleString()} KES</p>
+                          </div>
+                          <div className="p-8 rounded-3xl bg-white/5 border border-white/5">
+                            <p className="text-xs font-bold opacity-40 mb-2 uppercase tracking-widest">Cost of Goods Sold</p>
+                            <p className="text-4xl font-serif font-bold text-primary">{restaurantState.financials.dailyCOGS.toLocaleString()} KES</p>
+                          </div>
+                          <div className="p-8 rounded-3xl bg-primary/10 border border-primary/20 md:col-span-2">
+                            <p className="text-xs font-bold text-primary mb-2 uppercase tracking-widest">Net Profit (Daily)</p>
+                            <p className="text-5xl font-serif font-bold">{(restaurantState.financials.dailyRevenue - restaurantState.financials.dailyCOGS).toLocaleString()} KES</p>
+                          </div>
                         </div>
-                        <div className="p-8 rounded-3xl bg-white/5 border border-white/5">
-                          <p className="text-xs font-bold opacity-40 mb-2 uppercase tracking-widest">Cost of Goods Sold</p>
-                          <p className="text-4xl font-serif font-bold text-primary">{restaurantState.financials.dailyCOGS.toLocaleString()} KES</p>
+                      </div>
+
+                      <div className="glass p-10 rounded-[40px] border-white/5">
+                        <div className="flex items-center justify-between mb-8">
+                          <h4 className="font-serif font-bold text-2xl">Vendor Invoices</h4>
+                          <FileText className="w-5 h-5 text-primary" />
                         </div>
-                        <div className="p-8 rounded-3xl bg-primary/10 border border-primary/20 md:col-span-2">
-                          <p className="text-xs font-bold text-primary mb-2 uppercase tracking-widest">Net Profit (Daily)</p>
-                          <p className="text-5xl font-serif font-bold">{(restaurantState.financials.dailyRevenue - restaurantState.financials.dailyCOGS).toLocaleString()} KES</p>
+                        {restaurantState.invoices.length === 0 ? (
+                          <div className="p-12 text-center border-2 border-dashed border-white/5 rounded-3xl">
+                            <p className="text-paper/30 text-xs font-bold uppercase tracking-widest">No invoices generated yet</p>
+                            <p className="text-paper/20 text-[10px] mt-2">Ask Stockton to generate an invoice for a vendor.</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {restaurantState.invoices.map(invoice => (
+                              <div key={invoice.id} className="p-6 rounded-2xl bg-white/5 border border-white/5 flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-xs font-bold">{invoice.vendor}</p>
+                                    <p className="text-[10px] text-paper/40">{new Date(invoice.createdAt).toLocaleDateString()}</p>
+                                  </div>
+                                  <span className="text-lg font-serif font-bold text-emerald-400">{invoice.amount.toLocaleString()} KES</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {invoice.items.map((item, idx) => (
+                                    <span key={idx} className="text-[9px] px-2 py-1 bg-white/5 rounded-md text-paper/60">{item}</span>
+                                  ))}
+                                </div>
+                                <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                                  <span className="text-[9px] uppercase font-black px-2 py-1 bg-primary/20 text-primary rounded-md">{invoice.status}</span>
+                                  <button className="text-[9px] font-black uppercase tracking-widest text-primary hover:underline">Download PDF</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Staffing Detail (Only in Staffing tab) */}
+                  {activeTab === "Staffing" && (
+                    <div className="lg:col-span-12 space-y-8">
+                      <div className="glass p-10 rounded-[40px] border-white/5">
+                        <div className="flex items-center justify-between mb-8">
+                          <h4 className="font-serif font-bold text-2xl">Current Shifts</h4>
+                          <Users className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          {restaurantState.staffing.shifts.map(shift => (
+                            <div key={shift.id} className="p-6 rounded-2xl bg-white/5 border border-white/5">
+                              <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                                  {shift.staffName.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold">{shift.staffName}</p>
+                                  <p className="text-[10px] text-primary/60 uppercase font-black">{shift.role}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] font-bold text-paper/40">
+                                <span>Start: {shift.start}</span>
+                                <span>End: {shift.end}</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
