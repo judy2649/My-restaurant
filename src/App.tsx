@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   ChefHat, 
@@ -21,7 +21,7 @@ import {
   Activity,
   FileText
 } from "lucide-react";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import Markdown from "react-markdown";
 import { cn } from "@/src/lib/utils";
 import confetti from "canvas-confetti";
@@ -60,6 +60,20 @@ interface Shift {
   end: string;
 }
 
+interface WorkflowStep {
+  id: string;
+  description: string;
+  status: "pending" | "in-progress" | "completed";
+}
+
+interface Workflow {
+  id: string;
+  title: string;
+  agentId: AgentType;
+  steps: WorkflowStep[];
+  createdAt: string;
+}
+
 interface RestaurantState {
   reservations: Reservation[];
   orders: Order[];
@@ -78,6 +92,7 @@ interface RestaurantState {
     dbStatus: "online" | "offline";
     ticketingStatus: "online" | "offline";
   };
+  workflows: Workflow[];
 }
 
 interface Agent {
@@ -135,6 +150,7 @@ const AGENTS: Agent[] = [
     1. Shift Optimization: Analyze historical guest data (reservations/orders) to suggest optimal staff counts.
     2. Schedule Management: Create and update staff shifts.
     3. Performance Tracking: Monitor staffing efficiency.
+    4. Workflow Creation: After resolving an operational issue or planning a shift, create a formal workflow to record the steps taken or planned.
     
     Guidelines: Use data to justify scheduling decisions. Be organized and professional.`,
     color: "from-emerald-500/20 to-teal-600/20"
@@ -162,6 +178,7 @@ const AGENTS: Agent[] = [
     1. Provide detailed price lists and menu information when asked.
     2. Monitor market trends and suggest or implement price adjustments.
     3. Explain the value of our 'Beast of a Feast' experience.
+    4. Workflow Creation: When updating prices or planning a promotion, create a workflow to track the execution.
     
     Guidelines: 
     - Always refer to the 'Current Restaurant State' provided in your context for the most up-to-date live prices.
@@ -199,22 +216,24 @@ const AGENTS: Agent[] = [
 
 const AgentCard = ({ agent, onClick }: { agent: Agent; onClick: () => void }) => (
   <motion.div
-    whileHover={{ y: -8, scale: 1.02 }}
+    whileHover={{ y: -2, scale: 1.01 }}
     whileTap={{ scale: 0.98 }}
     onClick={onClick}
     className={cn(
-      "p-8 rounded-[32px] glass-card cursor-pointer group relative overflow-hidden",
+      "p-4 rounded-2xl glass-card cursor-pointer group relative overflow-hidden",
       "hover:border-primary/50 transition-all duration-500"
     )}
   >
     <div className={cn("absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-700", agent.color)} />
     <div className="relative z-10">
-      <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
-        {agent.icon}
+      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-3 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+        <div className="w-4 h-4 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full">
+          {agent.icon}
+        </div>
       </div>
-      <h3 className="text-2xl font-serif font-bold mb-1">{agent.name}</h3>
-      <p className="text-primary/80 text-xs font-black uppercase tracking-widest mb-4">{agent.role}</p>
-      <p className="text-paper/50 text-sm leading-relaxed line-clamp-3">{agent.description}</p>
+      <h3 className="text-base font-serif font-bold mb-0.5">{agent.name}</h3>
+      <p className="text-primary/80 text-[9px] font-black uppercase tracking-widest mb-1.5">{agent.role}</p>
+      <p className="text-paper/50 text-[11px] leading-tight line-clamp-2">{agent.description}</p>
     </div>
   </motion.div>
 );
@@ -260,7 +279,13 @@ const ChatInterface = ({
       }
 
       const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
+      
+      // Add a placeholder message for the agent that we will update with the stream
+      let currentResponseText = "";
+      const initialMessages = [...newMessages, { role: "agent" as const, content: "" }];
+      onMessagesUpdate(initialMessages);
+
+      const responseStream = await ai.models.generateContentStream({
         model: "gemini-3-flash-preview",
         contents: [
           ...newMessages.map(m => ({ 
@@ -270,6 +295,7 @@ const ChatInterface = ({
         ],
         config: {
           systemInstruction: agent.systemPrompt + `\n\nCurrent Restaurant State: ${JSON.stringify(restaurantState)}`,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [
             {
               functionDeclarations: [
@@ -364,6 +390,27 @@ const ChatInterface = ({
                     type: Type.OBJECT,
                     properties: {}
                   }
+                },
+                {
+                  name: "create_workflow",
+                  description: "Create a new multi-step workflow based on a conversation or task.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING, description: "Title of the workflow" },
+                      steps: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            description: { type: Type.STRING, description: "Description of the step" }
+                          },
+                          required: ["description"]
+                        }
+                      }
+                    },
+                    required: ["title", "steps"]
+                  }
                 }
               ]
             }
@@ -371,21 +418,25 @@ const ChatInterface = ({
         },
       });
 
-      const candidate = response.candidates?.[0];
-      const functionCalls = candidate?.content?.parts?.filter((p: any) => p.functionCall);
+      let finalResponse = null;
+      for await (const chunk of responseStream) {
+        if (chunk.text) {
+          currentResponseText += chunk.text;
+          onMessagesUpdate([...newMessages, { role: "agent", content: currentResponseText }]);
+        }
+        finalResponse = chunk;
+      }
 
-      if (functionCalls && functionCalls.length > 0) {
-        for (const callPart of functionCalls) {
-          const call = callPart.functionCall;
+      if (finalResponse && finalResponse.functionCalls) {
+        for (const call of finalResponse.functionCalls) {
           onOperation(call.name, call.args);
-          
-          // For simplicity in this demo, we'll just acknowledge the action
-          const successMsg = `[System: ${call.name} executed successfully]`;
           onMessagesUpdate([...newMessages, { role: "agent", content: `I've successfully processed that operation: ${call.name}. Is there anything else you need?` }]);
         }
+      } else if (currentResponseText) {
+        // Log general assistance to workflows
+        onOperation("agent_consultation", { summary: currentResponseText.slice(0, 100) + "..." });
       } else {
-        const text = response.text || "I apologize, I am unable to process that request at the moment.";
-        onMessagesUpdate([...newMessages, { role: "agent", content: text }]);
+        onMessagesUpdate([...newMessages, { role: "agent", content: "I apologize, I am unable to process that request at the moment." }]);
       }
     } catch (error: any) {
       console.error("Full Chat Error Context:", {
@@ -433,7 +484,7 @@ const ChatInterface = ({
               onClick={() => onMessagesUpdate([])}
               className="px-4 py-2 text-[10px] uppercase tracking-widest font-bold hover:bg-white/5 rounded-lg transition-colors opacity-40 hover:opacity-100"
             >
-              Clear History
+              New Conversation
             </button>
             <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
               <X className="w-6 h-6" />
@@ -471,9 +522,9 @@ const ChatInterface = ({
                   ? "bg-primary text-paper font-medium rounded-tr-none" 
                   : "bg-white/10 text-paper border border-white/5 rounded-tl-none"
               )}>
-                <div className="markdown-body">
-                  <Markdown>{msg.content}</Markdown>
-                </div>
+              <div className="prose prose-invert prose-sm max-w-none">
+                <Markdown>{msg.content}</Markdown>
+              </div>
               </div>
               <span className="text-[10px] mt-2 opacity-40 uppercase tracking-widest font-bold">
                 {msg.role === "user" ? "Guest" : agent.name}
@@ -519,6 +570,15 @@ const ChatInterface = ({
 export default function App() {
   const [view, setView] = useState<"landing" | "dashboard">("landing");
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("Overview");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to top when tab changes
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [activeTab]);
   
   // --- Restaurant Operations State ---
   const [restaurantState, setRestaurantState] = useState<RestaurantState>({
@@ -560,7 +620,8 @@ export default function App() {
       latency: 45,
       dbStatus: "online",
       ticketingStatus: "online"
-    }
+    },
+    workflows: []
   });
 
   const [chatHistories, setChatHistories] = useState<Record<AgentType, { role: "user" | "agent"; content: string }[]>>({
@@ -575,6 +636,26 @@ export default function App() {
   const handleOperation = (type: string, data: any) => {
     setRestaurantState(prev => {
       const newState = { ...prev };
+      
+      // Auto-record operation in workflows
+      if (type !== "create_workflow") {
+        const opName = type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        const newWorkflow = {
+          id: Math.random().toString(36).substr(2, 9),
+          title: `${opName} Execution`,
+          agentId: activeAgent?.id || "openai",
+          createdAt: new Date().toISOString(),
+          steps: [
+            { 
+              id: "step-1", 
+              description: `Agent ${activeAgent?.name || 'System'} performed ${type.replace(/_/g, ' ')}.`, 
+              status: "completed" as const 
+            }
+          ]
+        };
+        newState.workflows = [newWorkflow, ...prev.workflows];
+      }
+
       switch (type) {
         case "create_reservation":
           newState.reservations = [...prev.reservations, {
@@ -626,6 +707,22 @@ export default function App() {
             ticketingStatus: Math.random() > 0.1 ? "online" : "offline"
           };
           break;
+        case "create_workflow":
+          newState.workflows = [{
+            id: Math.random().toString(36).substr(2, 9),
+            title: data.title,
+            agentId: activeAgent?.id || "openai",
+            createdAt: new Date().toISOString(),
+            steps: data.steps.map((s: any) => ({
+              id: Math.random().toString(36).substr(2, 5),
+              description: s.description,
+              status: "pending"
+            }))
+          }, ...prev.workflows];
+          break;
+        case "agent_consultation":
+          // Already handled by the auto-record logic above switch
+          break;
       }
       return newState;
     });
@@ -646,6 +743,7 @@ export default function App() {
       colors: ["#FF2D95", "#9D4EDD", "#FFFFFF"]
     });
     setView("dashboard");
+    setActiveTab("Overview");
   };
 
   return (
@@ -772,292 +870,298 @@ export default function App() {
         ) : (
           <motion.div
             key="dashboard"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="p-6 md:p-12 max-w-7xl mx-auto space-y-12"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex h-screen overflow-hidden bg-ink"
           >
-            {/* Dashboard Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-              <div className="space-y-2">
-                <div className="flex items-center gap-3 text-primary">
-                  <div className="w-8 h-[2px] bg-primary rounded-full" />
-                  <span className="uppercase tracking-[0.4em] text-[10px] font-black">The Carnivore Restaurant</span>
+            {/* Vertical Sidebar */}
+            <div className="w-60 glass-card border-r border-white/5 flex flex-col p-5 z-20">
+              <div className="mb-6">
+                <div className="flex items-center gap-2 text-primary mb-1.5">
+                  <ChefHat className="w-4 h-4" />
+                  <span className="uppercase tracking-[0.3em] text-[8px] font-black">Carnivore Hub</span>
                 </div>
-                <h2 className="text-6xl font-serif font-bold tracking-tight">Operations Hub</h2>
-                <p className="text-paper/40 font-medium">Monitoring the "Beast of a Feast" in real-time.</p>
+                <h2 className="text-xl font-serif font-bold tracking-tight leading-none">Operations</h2>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="glass px-6 py-3 rounded-2xl flex items-center gap-3 border-primary/20 group cursor-pointer hover:bg-white/10 transition-all">
-                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  <span className="text-sm font-bold tracking-wide">Live AI Sync</span>
+
+              <nav className="flex-1 space-y-1">
+                {[
+                  { name: "Overview", icon: <Activity className="w-3 h-3" /> },
+                  { name: "Agents", icon: <Sparkles className="w-3 h-3" /> },
+                  { name: "Inventory", icon: <Warehouse className="w-3 h-3" /> },
+                  { name: "Workflows", icon: <FileText className="w-3 h-3" /> },
+                  { name: "Financials", icon: <TrendingUp className="w-3 h-3" /> },
+                ].map((item) => (
+                  <button 
+                    key={item.name}
+                    onClick={() => setActiveTab(item.name)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all duration-300 cursor-pointer group",
+                      activeTab === item.name ? "bg-primary text-paper shadow-lg shadow-primary/20 scale-[1.02]" : "hover:bg-white/5 text-paper/40 hover:text-paper"
+                    )}
+                  >
+                    <span className="pointer-events-none group-hover:scale-110 transition-transform">{item.icon}</span>
+                    <span className="pointer-events-none">{item.name}</span>
+                  </button>
+                ))}
+              </nav>
+
+              <div className="mt-auto pt-8 border-t border-white/5 space-y-6">
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                  <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-3">System Health</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold">Latency</span>
+                    <span className="text-[10px] font-black text-emerald-400">{restaurantState.systemHealth.latency}ms</span>
+                  </div>
+                  <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 w-[85%]" />
+                  </div>
                 </div>
                 <button 
                   onClick={() => setView("landing")}
-                  className="p-4 glass rounded-2xl hover:bg-primary/20 hover:text-primary transition-all duration-300"
+                  className="w-full flex items-center justify-center gap-3 p-4 glass rounded-2xl hover:bg-primary/20 hover:text-primary transition-all text-[10px] font-black uppercase tracking-widest"
                 >
-                  <Settings className="w-6 h-6" />
+                  <Settings className="w-4 h-4" />
+                  Settings
                 </button>
               </div>
             </div>
 
-            {/* Dashboard Navigation */}
-            <div className="flex items-center gap-2 p-2 glass rounded-[32px] w-fit border-white/5">
-              {["Overview", "Agents", "Inventory", "Analytics"].map((tab, i) => (
-                <button 
-                  key={tab}
-                  className={cn(
-                    "px-8 py-3 rounded-[24px] text-xs font-black uppercase tracking-widest transition-all duration-300",
-                    i === 0 ? "bg-primary text-paper shadow-lg shadow-primary/20" : "hover:bg-white/5 text-paper/40 hover:text-paper"
+            {/* Main Content Area */}
+            <div 
+              ref={scrollContainerRef}
+              className="flex-1 overflow-y-auto scrollbar-hide bg-ink/50 scroll-smooth"
+            >
+              <header className="sticky top-0 z-10 p-8 flex items-center justify-between backdrop-blur-md bg-ink/20 border-b border-white/5">
+                <div>
+                  <h1 className="text-4xl font-serif font-bold">Dashboard</h1>
+                  <p className="text-xs text-paper/40 mt-1">Welcome back, Administrator</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="glass px-6 py-3 rounded-2xl flex items-center gap-3 border-primary/20">
+                    <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Live AI Sync</span>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-paper/60" />
+                  </div>
+                </div>
+              </header>
+
+              <div className="p-8 space-y-8 max-w-6xl mx-auto">
+                {/* Top Stats Row */}
+                {(activeTab === "Overview" || activeTab === "Financials") && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="glass p-8 rounded-[32px] border-white/5">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-2">Daily Revenue</p>
+                      <h4 className="text-3xl font-serif font-bold text-emerald-400">{restaurantState.financials.dailyRevenue.toLocaleString()} KES</h4>
+                      <div className="mt-4 flex items-center gap-2 text-[10px] text-emerald-400 font-bold">
+                        <TrendingUp className="w-3 h-3" />
+                        +12.5% from yesterday
+                      </div>
+                    </div>
+                    <div className="glass p-8 rounded-[32px] border-white/5">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-2">Active Orders</p>
+                      <h4 className="text-3xl font-serif font-bold">{restaurantState.orders.length}</h4>
+                      <div className="mt-4 flex items-center gap-2 text-[10px] text-primary font-bold">
+                        <Activity className="w-3 h-3" />
+                        Kitchen at 85% capacity
+                      </div>
+                    </div>
+                    <div className="glass p-8 rounded-[32px] border-white/5">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-2">Staff on Duty</p>
+                      <h4 className="text-3xl font-serif font-bold">{restaurantState.staffing.shifts.length}</h4>
+                      <div className="mt-4 flex items-center gap-2 text-[10px] text-paper/40 font-bold">
+                        <Users className="w-3 h-3" />
+                        Optimal: {restaurantState.staffing.optimalStaffCount}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Main Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  {/* Agents Section */}
+                  {(activeTab === "Overview" || activeTab === "Agents") && (
+                    <div className="lg:col-span-12">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-2xl font-serif font-bold">
+                          {activeTab === "Overview" ? "Featured Agents" : "Culinary AI Hub"}
+                        </h3>
+                        <div className="h-[1px] flex-1 mx-8 bg-white/5" />
+                        {activeTab === "Overview" && (
+                          <button 
+                            onClick={() => setActiveTab("Agents")}
+                            className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline"
+                          >
+                            View All
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        {(activeTab === "Overview" ? AGENTS.slice(0, 5) : AGENTS).map((agent) => (
+                          <AgentCard 
+                            key={agent.id} 
+                            agent={agent} 
+                            onClick={() => setActiveAgent(agent)} 
+                          />
+                        ))}
+                      </div>
+                    </div>
                   )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
 
-            {/* Dashboard Bento Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Financial Overview */}
-              <div className="lg:col-span-4 glass p-8 rounded-[40px] border-primary/10 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="font-serif font-bold text-2xl">Financials</h4>
-                    <TrendingUp className="w-6 h-6 text-emerald-400" />
-                  </div>
-                  <div className="space-y-6">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">Daily Revenue</p>
-                      <p className="text-3xl font-serif font-bold text-emerald-400">{restaurantState.financials.dailyRevenue.toLocaleString()} KES</p>
+                  {/* Active Workflows */}
+                  {(activeTab === "Overview" || activeTab === "Workflows") && (
+                    <div className={cn(
+                      "glass p-8 rounded-[40px] border-white/5",
+                      activeTab === "Overview" ? "lg:col-span-8" : "lg:col-span-12"
+                    )}>
+                      <div className="flex items-center justify-between mb-8">
+                        <h4 className="font-serif font-bold text-2xl">
+                          {activeTab === "Overview" ? "Recent Workflows" : "All Workflows"}
+                        </h4>
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="space-y-4">
+                        {restaurantState.workflows.length === 0 ? (
+                          <div className="py-12 text-center opacity-20 italic text-sm">No active workflows.</div>
+                        ) : (
+                          (activeTab === "Overview" ? restaurantState.workflows.slice(0, 3) : restaurantState.workflows).map(workflow => (
+                            <div key={workflow.id} className="p-6 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all">
+                              <div className="flex items-center justify-between mb-4">
+                                <h5 className="font-bold">{workflow.title}</h5>
+                                <span className="text-[10px] uppercase font-black px-2 py-1 bg-primary/20 text-primary rounded-md">
+                                  {AGENTS.find(a => a.id === workflow.agentId)?.name}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {workflow.steps.map((step, idx) => (
+                                  <div key={step.id} className="flex items-center gap-3">
+                                    <div className="w-5 h-5 rounded-full border border-primary/30 flex items-center justify-center text-[8px] font-black text-primary">
+                                      {idx + 1}
+                                    </div>
+                                    <p className="text-[10px] text-paper/60">{step.description}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {activeTab === "Overview" && restaurantState.workflows.length > 3 && (
+                          <button 
+                            onClick={() => setActiveTab("Workflows")}
+                            className="w-full py-4 text-[10px] font-black uppercase tracking-widest text-paper/40 hover:text-paper transition-colors"
+                          >
+                            + {restaurantState.workflows.length - 3} more workflows
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">Cost of Goods Sold (COGS)</p>
-                      <p className="text-3xl font-serif font-bold text-primary">{restaurantState.financials.dailyCOGS.toLocaleString()} KES</p>
-                    </div>
-                    <div className="pt-4 border-t border-white/5">
-                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">Gross Profit Margin</p>
-                      <p className="text-xl font-bold">
-                        {(((restaurantState.financials.dailyRevenue - restaurantState.financials.dailyCOGS) / restaurantState.financials.dailyRevenue) * 100).toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  )}
 
-              {/* System Health */}
-              <div className="lg:col-span-4 glass p-8 rounded-[40px] border-primary/10 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="font-serif font-bold text-2xl">System Health</h4>
-                    <Activity className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
-                      <span className="text-xs font-bold uppercase tracking-widest">Latency</span>
-                      <span className="text-xs font-black text-emerald-400">{restaurantState.systemHealth.latency}ms</span>
+                  {/* Inventory Status */}
+                  {(activeTab === "Overview" || activeTab === "Inventory") && (
+                    <div className={cn(
+                      "glass p-8 rounded-[40px] border-white/5",
+                      activeTab === "Overview" ? "lg:col-span-4" : "lg:col-span-12"
+                    )}>
+                      <div className="flex items-center justify-between mb-8">
+                        <h4 className="font-serif font-bold text-2xl">Stock</h4>
+                        <Warehouse className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="space-y-6">
+                        {(activeTab === "Overview" ? restaurantState.inventory.slice(0, 5) : restaurantState.inventory).map(item => (
+                          <div key={item.id} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-bold">{item.name}</p>
+                              <p className="text-[10px] font-black opacity-40">{item.stock} {item.unit}</p>
+                            </div>
+                            <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${Math.min((item.stock / (item.minLevel * 2)) * 100, 100)}%` }}
+                                className={cn("h-full", item.stock < item.minLevel ? "bg-primary" : "bg-emerald-500")} 
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        {activeTab === "Overview" && restaurantState.inventory.length > 5 && (
+                          <button 
+                            onClick={() => setActiveTab("Inventory")}
+                            className="w-full py-2 text-[10px] font-black uppercase tracking-widest text-paper/40 hover:text-paper transition-colors"
+                          >
+                            View Full Inventory
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
-                      <span className="text-xs font-bold uppercase tracking-widest">Database</span>
-                      <span className={cn(
-                        "text-[10px] uppercase font-black px-2 py-1 rounded-md",
-                        restaurantState.systemHealth.dbStatus === "online" ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"
-                      )}>{restaurantState.systemHealth.dbStatus}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
-                      <span className="text-xs font-bold uppercase tracking-widest">Ticketing Site</span>
-                      <span className={cn(
-                        "text-[10px] uppercase font-black px-2 py-1 rounded-md",
-                        restaurantState.systemHealth.ticketingStatus === "online" ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"
-                      )}>{restaurantState.systemHealth.ticketingStatus}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-6 p-4 rounded-2xl bg-primary/10 border border-primary/20 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.2em] font-black text-primary">Last Ping: Just Now</p>
-                </div>
-              </div>
+                  )}
 
-              {/* Staffing & Shifts */}
-              <div className="lg:col-span-4 glass p-8 rounded-[40px] border-primary/10 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="font-serif font-bold text-2xl">Staffing</h4>
-                    <Users className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2 scrollbar-hide">
-                    {restaurantState.staffing.shifts.map(shift => (
-                      <div key={shift.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                  {/* Live Operations */}
+                  {activeTab === "Overview" && (
+                    <div className="lg:col-span-12 glass p-10 rounded-[40px] border-white/5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                         <div>
-                          <p className="text-xs font-bold">{shift.staffName}</p>
-                          <p className="text-[10px] text-paper/40">{shift.role}</p>
+                          <div className="flex items-center gap-3 mb-6">
+                            <ClipboardList className="w-5 h-5 text-primary" />
+                            <h4 className="font-serif font-bold text-2xl">Recent Orders</h4>
+                          </div>
+                          <div className="space-y-3">
+                            {restaurantState.orders.slice(-4).reverse().map(order => (
+                              <div key={order.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                                <p className="text-xs font-bold">{order.items.map(i => `${i.quantity}x ${i.name}`).join(", ")}</p>
+                                <span className="text-[10px] uppercase font-black px-2 py-1 bg-primary/20 text-primary rounded-md">{order.status}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <span className="text-[10px] font-black text-primary">{shift.start} - {shift.end}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-6 pt-4 border-t border-white/5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] uppercase tracking-widest font-black text-paper/40">Optimal Staffing</p>
-                    <p className="text-lg font-bold text-emerald-400">{restaurantState.staffing.optimalStaffCount} Agents</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Hero Section - Large Feature */}
-              <div className="lg:col-span-8 relative h-[400px] rounded-[40px] overflow-hidden group shadow-2xl border border-white/10">
-                <img 
-                  src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=2000&auto=format&fit=crop" 
-                  alt="The Roasting Pit" 
-                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/40 to-transparent" />
-                <div className="absolute bottom-10 left-10 right-10">
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="px-3 py-1 rounded-full bg-primary text-paper text-[10px] font-black uppercase tracking-widest">Signature Experience</span>
-                    <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-paper text-[10px] font-black uppercase tracking-widest border border-white/10">Live Pit</span>
-                  </div>
-                  <h3 className="text-4xl font-serif font-bold mb-2">Charcoal Pit Roasting</h3>
-                  <p className="text-paper/70 max-w-lg leading-relaxed">Experience the authentic Maasai sword carving tradition. Our pit is currently at optimal temperature for the evening feast.</p>
-                </div>
-              </div>
-
-              {/* System Health Sprite - Integrated into Grid */}
-              <div className="lg:col-span-4 glass p-10 rounded-[40px] border-primary/10 flex flex-col justify-between">
-                <div>
-                  <h4 className="font-serif font-bold text-2xl mb-2">Agent Status</h4>
-                  <p className="text-xs text-paper/40 mb-8">All systems operational and verified.</p>
-                  <div className="space-y-4">
-                    {AGENTS.map(agent => (
-                      <div key={agent.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group">
-                        <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
-                          <span className="text-xs font-bold uppercase tracking-widest">{agent.name}</span>
+                        <div>
+                          <div className="flex items-center gap-3 mb-6">
+                            <ConciergeBell className="w-5 h-5 text-emerald-400" />
+                            <h4 className="font-serif font-bold text-2xl">Reservations</h4>
+                          </div>
+                          <div className="space-y-3">
+                            {restaurantState.reservations.slice(-4).reverse().map(res => (
+                              <div key={res.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-bold">{res.name}</p>
+                                  <p className="text-[10px] text-paper/40">{new Date(res.date).toLocaleTimeString()}</p>
+                                </div>
+                                <span className="text-[10px] font-black text-emerald-400">{res.guests} Guests</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-8 p-4 rounded-2xl bg-primary/10 border border-primary/20 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.2em] font-black text-primary">System Integrity: 100%</p>
-                </div>
-              </div>
-
-              {/* Agents Section */}
-              <div className="lg:col-span-12">
-                <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-3xl font-serif font-bold">Culinary AI Hub</h3>
-                  <div className="flex gap-2">
-                    <div className="w-12 h-1 bg-primary rounded-full" />
-                    <div className="w-4 h-1 bg-white/20 rounded-full" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                  {AGENTS.map((agent) => (
-                    <AgentCard 
-                      key={agent.id} 
-                      agent={agent} 
-                      onClick={() => setActiveAgent(agent)} 
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Stats & Trends Section */}
-              <div className="lg:col-span-6 glass p-10 rounded-[40px] border-primary/10">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h4 className="font-serif font-bold text-2xl">Inventory Status</h4>
-                    <p className="text-xs text-paper/40">Real-time stock monitoring</p>
-                  </div>
-                  <Warehouse className="w-6 h-6 text-primary" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {restaurantState.inventory.map(item => (
-                    <div key={item.id} className="p-5 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-bold tracking-tight">{item.name}</p>
-                        <p className={cn(
-                          "text-xs font-black",
-                          item.stock < item.minLevel ? "text-primary" : "text-emerald-400"
-                        )}>{item.stock} {item.unit}</p>
-                      </div>
-                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min((item.stock / (item.minLevel * 3)) * 100, 100)}%` }}
-                          transition={{ duration: 1.5, ease: "easeOut" }}
-                          className={cn(
-                            "h-full",
-                            item.stock < item.minLevel ? "bg-primary" : "bg-emerald-500"
-                          )} 
-                        />
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  )}
 
-              <div className="lg:col-span-6 glass p-10 rounded-[40px] border-primary/10">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h4 className="font-serif font-bold text-2xl">Live Operations</h4>
-                    <p className="text-xs text-paper/40">Active orders and reservations</p>
-                  </div>
-                  <ClipboardList className="w-6 h-6 text-primary" />
-                </div>
-                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
-                  <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest font-black text-primary/60">Recent Orders</p>
-                    {restaurantState.orders.slice(-3).reverse().map(order => (
-                      <div key={order.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold">{order.items.map(i => `${i.quantity}x ${i.name}`).join(", ")}</p>
-                          <p className="text-[10px] text-paper/40">{new Date(order.timestamp).toLocaleTimeString()}</p>
+                  {/* Financials Detail (Only in Financials tab) */}
+                  {activeTab === "Financials" && (
+                    <div className="lg:col-span-12 glass p-10 rounded-[40px] border-white/5">
+                      <h4 className="font-serif font-bold text-2xl mb-8">Financial Performance</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="p-8 rounded-3xl bg-white/5 border border-white/5">
+                          <p className="text-xs font-bold opacity-40 mb-2 uppercase tracking-widest">Gross Revenue</p>
+                          <p className="text-4xl font-serif font-bold text-emerald-400">{restaurantState.financials.dailyRevenue.toLocaleString()} KES</p>
                         </div>
-                        <span className="text-[10px] uppercase font-black px-2 py-1 bg-primary/20 text-primary rounded-md">{order.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-2 mt-6">
-                    <p className="text-[10px] uppercase tracking-widest font-black text-emerald-500/60">Upcoming Reservations</p>
-                    {restaurantState.reservations.slice(-3).reverse().map(res => (
-                      <div key={res.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold">{res.name}</p>
-                          <p className="text-[10px] text-paper/40">{new Date(res.date).toLocaleString()}</p>
+                        <div className="p-8 rounded-3xl bg-white/5 border border-white/5">
+                          <p className="text-xs font-bold opacity-40 mb-2 uppercase tracking-widest">Cost of Goods Sold</p>
+                          <p className="text-4xl font-serif font-bold text-primary">{restaurantState.financials.dailyCOGS.toLocaleString()} KES</p>
                         </div>
-                        <span className="text-[10px] font-black text-emerald-400">{res.guests} Guests</span>
+                        <div className="p-8 rounded-3xl bg-primary/10 border border-primary/20 md:col-span-2">
+                          <p className="text-xs font-bold text-primary mb-2 uppercase tracking-widest">Net Profit (Daily)</p>
+                          <p className="text-5xl font-serif font-bold">{(restaurantState.financials.dailyRevenue - restaurantState.financials.dailyCOGS).toLocaleString()} KES</p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="lg:col-span-12 glass p-10 rounded-[40px] border-primary/10">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h4 className="font-serif font-bold text-2xl">Menu Pricing</h4>
-                    <p className="text-xs text-paper/40">Live menu rates managed by Valora</p>
-                  </div>
-                  <BarChart3 className="w-6 h-6 text-primary" />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                  {Object.entries(restaurantState.marketPrices).map(([item, price]) => (
-                    <div key={item} className="p-4 rounded-2xl bg-white/5 border border-white/5 text-center hover:bg-white/10 transition-all">
-                      <p className="text-[10px] uppercase tracking-widest font-black text-paper/40 mb-1">{item}</p>
-                      <p className="text-lg font-serif font-bold text-primary">{price.toLocaleString()} KES</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* Active Agent Chat Overlay */}
       <AnimatePresence>
         {activeAgent && (
